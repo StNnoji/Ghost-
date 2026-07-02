@@ -1,0 +1,7 @@
+.env
+node_modules/
+*.log
+*.zip
+.DS_Store
+alexs-ghost/.env
+alexs-ghost/node_modules/

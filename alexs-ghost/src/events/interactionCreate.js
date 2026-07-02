@@ -1,0 +1,80 @@
+const { Events } = require("discord.js");
+const UserGhostProfile = require("../models/UserGhostProfile");
+const { safeReply, safeSend } = require("../utils/safeSend");
+const logger = require("../utils/logger");
+
+async function handleConsentButton(interaction) {
+  const [action, guildId, userId] = interaction.customId.split(":");
+  if (interaction.user.id !== userId) {
+    return safeReply(interaction, { content: "This consent button is only for the selected person 👻", ephemeral: true });
+  }
+
+  if (action === "ghost_consent_no") {
+    await UserGhostProfile.findOneAndUpdate(
+      { guildId, userId },
+      { consent: false, dmModeEnabled: false, dmChannelAvailable: false, active: true, lastInteractionAt: new Date() },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+
+    return safeReply(interaction, {
+      content: "No worries 🌙 I'll stay quiet unless you want me later.",
+      ephemeral: true,
+      components: []
+    });
+  }
+
+  const dmModeEnabled = action === "ghost_consent_dm";
+  const profile = await UserGhostProfile.findOneAndUpdate(
+    { guildId, userId },
+    { consent: true, dmModeEnabled, active: true, lastInteractionAt: new Date() },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  if (dmModeEnabled) {
+    const dmSent = await safeSend(
+      interaction.user,
+      "Hii hii~ 👻🌸 I'm here now. Alex made me to make you smile, but I'll stay soft and respectful."
+    );
+
+    profile.dmChannelAvailable = Boolean(dmSent);
+    profile.lastDmFailedAt = dmSent ? null : new Date();
+    await profile.save();
+
+    return safeReply(interaction, {
+      content: dmSent
+        ? "Yayy~ thank you 🥹👻 I sent you a DM. I'll keep our normal cute ghost talks there."
+        : "I couldn't DM you 🥺 Please check your Discord privacy settings or DM me first.",
+      ephemeral: true,
+      components: []
+    });
+  }
+
+  profile.dmChannelAvailable = false;
+  profile.lastDmFailedAt = null;
+  await profile.save();
+
+  return safeReply(interaction, {
+    content: "Yayy~ thank you 🥹👻 I'll stay soft, cute, respectful, and server-only.",
+    ephemeral: true,
+    components: []
+  });
+}
+
+module.exports = {
+  name: Events.InteractionCreate,
+  async execute(interaction) {
+    try {
+      if (interaction.isButton() && interaction.customId.startsWith("ghost_consent_")) {
+        return handleConsentButton(interaction);
+      }
+
+      if (!interaction.isChatInputCommand()) return null;
+      const command = interaction.client.commands.get(interaction.commandName);
+      if (!command) return safeReply(interaction, { content: "Tiny ghost could not find that command 👻", ephemeral: true });
+      return command.execute(interaction);
+    } catch (error) {
+      logger.error("Interaction failed", error);
+      return safeReply(interaction, { content: "Aaa, tiny ghost tripped on a moonbeam. Please try again 🌙👻", ephemeral: true });
+    }
+  }
+};
