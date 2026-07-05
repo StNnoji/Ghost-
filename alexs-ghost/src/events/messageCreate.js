@@ -2,12 +2,13 @@ const { Events, ChannelType } = require("discord.js");
 const GuildSettings = require("../models/GuildSettings");
 const UserGhostProfile = require("../models/UserGhostProfile");
 const { detectLocalIntent } = require("../brain/localIntents");
+const { config } = require("../config");
 const { buildGhostReply, sendGhostReply } = require("../services/chatService");
 const { saveGhostMessage, saveUserMessage } = require("../services/chatHistoryService");
 const { shouldDisableCheckIns } = require("../services/checkInService");
 const { getUserIdentity } = require("../services/identityService");
 const { detectMood } = require("../services/moodService");
-const { buildOwnerDmReply } = require("../services/ownerReportService");
+const { buildOwnerDmReply, isOwnerStatusQuestion } = require("../services/ownerReportService");
 const { isOnCooldown, countInWindow } = require("../utils/cooldowns");
 const logger = require("../utils/logger");
 
@@ -57,13 +58,27 @@ module.exports = {
       const detectedMood = detectMood(cleaned);
 
       if (isDm && identity.isOwner) {
-        const intent = "owner_status";
-        await saveDmUserHistory(message, { guildId: null, cleaned, detectedMood, intent });
+        const ownerGuildId = config.guildId || `owner-dm:${message.author.id}`;
+        const isStatusQuestion = isOwnerStatusQuestion(cleaned);
+        const intentResult = detectLocalIntent(cleaned, { lastMood: detectedMood });
+        const intent = isStatusQuestion ? "owner_status" : intentResult.intent;
+        await saveDmUserHistory(message, { guildId: isStatusQuestion ? null : ownerGuildId, cleaned, detectedMood, intent });
         if (isOnCooldown(`owner-dm:${message.author.id}`, 2000)) return;
         await message.channel.sendTyping().catch(() => null);
-        const text = await buildOwnerDmReply(cleaned);
-        const sentMessage = await message.channel.send(text);
-        await saveDmGhostHistory(message, sentMessage, text, { guildId: null, detectedMood, intent });
+        if (isStatusQuestion) {
+          const text = await buildOwnerDmReply(cleaned);
+          const sentMessage = await message.channel.send(text);
+          await saveDmGhostHistory(message, sentMessage, text, { guildId: null, detectedMood, intent });
+          return;
+        }
+
+        const reply = await buildGhostReply({ guildId: ownerGuildId, userId: message.author.id, content: cleaned, identity });
+        const sentMessage = await sendGhostReply(message.channel, reply);
+        await saveDmGhostHistory(message, sentMessage, reply.text, {
+          guildId: ownerGuildId,
+          detectedMood: reply.detectedMood || detectedMood,
+          intent: reply.intent || intent
+        });
         return;
       }
 

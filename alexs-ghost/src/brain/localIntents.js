@@ -67,7 +67,6 @@ function detectLocalIntent(message = "", context = {}) {
   };
 
   if (!text) return { intent: "unknown", confidence: 0, mood: "neutral", entities };
-  if (lower.includes("?")) return { intent: "question", confidence: 0.85, mood: "neutral", entities };
   if (context.lastQuestionAskedByGhost && /^(yes|yeah|yep|no|nope|nah|maybe|nothing|fine|okay|ok|later|idk|i don't know|dont know|biryani|rice|pizza|burger|chai|tea)$/i.test(lower)) {
     return { intent: /^(yes|yeah|yep|no|nope|nah)$/i.test(lower) ? "yes_no_answer" : "short_answer", confidence: 0.9, mood: context.lastMood || "neutral", entities };
   }
@@ -76,6 +75,7 @@ function detectLocalIntent(message = "", context = {}) {
     if (pattern.test(text)) return { intent, confidence: 0.9, mood, entities };
   }
 
+  if (lower.includes("?")) return { intent: "question", confidence: 0.85, mood: "neutral", entities };
   if (text.split(/\s+/).length <= 3) return { intent: "short_answer", confidence: 0.45, mood: context.lastMood || "neutral", entities };
   return { intent: "unknown", confidence: 0.25, mood: context.lastMood || "neutral", entities };
 }

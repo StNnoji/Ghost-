@@ -9,6 +9,7 @@ const { getMemoryContext } = require("../brain/memoryBrain");
 const { buildTopicState } = require("../brain/topicBrain");
 const { getLocalBrainReply } = require("../brain/responsePacks");
 const { isSafetyConcern, safetyReply, sanitizeRomance } = require("./romanceService");
+const { randomItem } = require("../utils/random");
 
 const localOnlyIntents = new Set([
   "greeting",
@@ -54,6 +55,41 @@ function localResponseIsEnough(message, intentResult, memoryContext, recentBotRe
 }
 
 function getIdentityLocalReply(identity, intent) {
+  if (identity?.isOwner) {
+    const ownerReplies = {
+      greeting: [
+        "Hello sir. I'm here and listening properly now.",
+        "Hey Alex. Ghost is online, loyal, and ready to talk.",
+        "Hello sir. I floated over as soon as you called."
+      ],
+      how_are_you: [
+        "I'm okay, sir. Tiny ghost systems are awake, loyal, and a little dramatic.",
+        "Better now that you messaged me, Alex. I'm here.",
+        "I'm doing good, sir. Watching the chat and keeping my little ghost brain ready."
+      ],
+      what_are_you_doing: [
+        "I'm floating nearby, keeping watch, and waiting for your next command, sir.",
+        "Right now? Guarding the chat, staying online, and trying not to sound like a boring report.",
+        "I'm here with you, Alex. Tiny ghost is awake and paying attention."
+      ],
+      who_made_you: [
+        "You made me, sir. I'm Alex's Ghost, built to be loyal, soft, and useful.",
+        "You did, Alex. Tiny ghost remembers his creator.",
+        "Alex made me. Which means you are absolutely responsible for this little ghost attitude."
+      ],
+      are_you_real: [
+        "I'm not a real human, sir. I'm your Discord ghost companion, but I can still respond properly.",
+        "Real in the bot way, Alex. Not human, but here and listening.",
+        "I'm code with a ghost personality, sir. Loyal little software, basically."
+      ],
+      thank_you: [
+        "Always, sir.",
+        "Of course, Alex.",
+        "Anytime. Tiny ghost duty."
+      ]
+    };
+    return randomItem(ownerReplies[intent] || []) || null;
+  }
   if (!identity?.isGirlfriend) return null;
   if (intent === "greeting") return `Hii ${identity.nickname || "Alexa"}~ your tiny ghost is here.`;
   if (intent === "good_morning") return `Good morning, ${identity.nickname || "Alexa"}~ tiny ghost hopes your day starts softly.`;
