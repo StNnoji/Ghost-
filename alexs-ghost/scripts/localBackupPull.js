@@ -67,7 +67,7 @@ async function run() {
       deletionRequestIds.push(request.requestId);
       const deleteQuery = request.guildId ? { userId: request.userId, guildId: request.guildId } : { userId: request.userId };
       await LocalHistory.deleteMany(deleteQuery);
-      const { _id, __v, syncStatus, syncAttempts, lastSyncError, syncedAt, ...localRequest } = request;
+      const { _id, __v, syncStatus, syncAttempts, lastSyncError, syncedAt, updatedAt, ...localRequest } = request;
       await LocalDeletion.findOneAndUpdate(
         { requestId: request.requestId },
         { $set: { ...localRequest, syncStatus: "synced", syncedAt: new Date() } },
@@ -96,7 +96,7 @@ async function run() {
 
     const acknowledgedIds = [];
     for (const message of messages) {
-      const { _id, __v, syncStatus, syncAttempts, lastSyncError, syncedAt, ...localMessage } = message;
+      const { _id, __v, syncStatus, syncAttempts, lastSyncError, syncedAt, updatedAt, ...localMessage } = message;
       await LocalHistory.findOneAndUpdate(
         { messageId: message.messageId },
         { $setOnInsert: { ...localMessage, syncStatus: "synced", syncedAt: new Date() } },
