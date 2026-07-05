@@ -1,4 +1,5 @@
 const { PermissionFlagsBits } = require("discord.js");
+const { isOwnerUser } = require("./identityService");
 
 function isGuildOwner(interaction) {
   return interaction.guild?.ownerId === interaction.user.id;
@@ -9,7 +10,11 @@ function hasManageGuild(interaction) {
 }
 
 function canManageGhost(interaction) {
-  return isGuildOwner(interaction) || hasManageGuild(interaction);
+  return isOwnerUser(interaction.user) || isGuildOwner(interaction) || hasManageGuild(interaction);
 }
 
-module.exports = { isGuildOwner, hasManageGuild, canManageGhost };
+function canOwnerOrManageGhost(interaction) {
+  return isOwnerUser(interaction.user) || hasManageGuild(interaction) || isGuildOwner(interaction);
+}
+
+module.exports = { isGuildOwner, hasManageGuild, canManageGhost, canOwnerOrManageGhost };

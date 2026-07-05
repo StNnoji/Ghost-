@@ -1,7 +1,13 @@
 const { Events, ChannelType } = require("discord.js");
 const GuildSettings = require("../models/GuildSettings");
 const UserGhostProfile = require("../models/UserGhostProfile");
+const { detectLocalIntent } = require("../brain/localIntents");
 const { buildGhostReply, sendGhostReply } = require("../services/chatService");
+const { saveGhostMessage, saveUserMessage } = require("../services/chatHistoryService");
+const { shouldDisableCheckIns } = require("../services/checkInService");
+const { getUserIdentity } = require("../services/identityService");
+const { detectMood } = require("../services/moodService");
+const { buildOwnerDmReply } = require("../services/ownerReportService");
 const { isOnCooldown, countInWindow } = require("../utils/cooldowns");
 const logger = require("../utils/logger");
 
@@ -15,6 +21,30 @@ async function isReplyToBot(message) {
   return replied?.author?.id === message.client.user.id;
 }
 
+async function saveDmUserHistory(message, { guildId, cleaned, detectedMood, intent }) {
+  await saveUserMessage(message, {
+    guildId,
+    channelType: "DM",
+    content: cleaned,
+    mood: detectedMood,
+    intent
+  }).catch((error) => logger.error("Failed to save DM user chat history", { reason: error?.message }));
+}
+
+async function saveDmGhostHistory(message, sentMessage, replyText, { guildId, detectedMood, intent }) {
+  if (!sentMessage?.id) return;
+  await saveGhostMessage(replyText, {
+    messageId: sentMessage.id,
+    userId: message.author.id,
+    guildId,
+    channelId: message.channel.id,
+    channelType: "DM",
+    mood: detectedMood,
+    intent,
+    createdAt: sentMessage.createdAt || new Date()
+  }).catch((error) => logger.error("Failed to save DM ghost chat history", { reason: error?.message }));
+}
+
 module.exports = {
   name: Events.MessageCreate,
   async execute(message) {
@@ -22,6 +52,21 @@ module.exports = {
       if (message.author.bot) return;
 
       const isDm = message.channel.type === ChannelType.DM;
+      const identity = getUserIdentity(message.author);
+      const cleaned = isDm ? message.content.trim() : message.content.replace(new RegExp(`<@!?${message.client.user.id}>`, "g"), "").trim() || message.content;
+      const detectedMood = detectMood(cleaned);
+
+      if (isDm && identity.isOwner) {
+        const intent = "owner_status";
+        await saveDmUserHistory(message, { guildId: null, cleaned, detectedMood, intent });
+        if (isOnCooldown(`owner-dm:${message.author.id}`, 2000)) return;
+        await message.channel.sendTyping().catch(() => null);
+        const text = await buildOwnerDmReply(cleaned);
+        const sentMessage = await message.channel.send(text);
+        await saveDmGhostHistory(message, sentMessage, text, { guildId: null, detectedMood, intent });
+        return;
+      }
+
       let guildId = message.guildId;
       let profile;
       let settings = null;
@@ -45,6 +90,23 @@ module.exports = {
       const directed = isDm || mentioned || repliedToBot || inGhostChannel;
       if (!directed) return;
 
+      const intentResult = detectLocalIntent(cleaned, {
+        lastQuestionAskedByGhost: profile.lastQuestionAskedByGhost,
+        lastMood: profile.lastMood || detectedMood
+      });
+
+      if (isDm) {
+        if (shouldDisableCheckIns(cleaned)) {
+          profile.girlfriendCheckInsEnabled = false;
+          profile.pendingOwnerCheckInRequestedAt = null;
+        }
+        if (profile.lastGirlfriendCheckInAt && (!profile.lastCheckInReplyAt || profile.lastCheckInReplyAt < profile.lastGirlfriendCheckInAt)) {
+          profile.lastCheckInReplyAt = new Date();
+        }
+        await profile.save();
+        await saveDmUserHistory(message, { guildId, cleaned, detectedMood, intent: intentResult.intent });
+      }
+
       if (isDm) {
         if (isOnCooldown(`dm:${guildId}:${message.author.id}`, 4000)) return;
       } else if (inGhostChannel && !mentioned && !repliedToBot) {
@@ -55,11 +117,15 @@ module.exports = {
       }
 
       await message.channel.sendTyping().catch(() => null);
-      const cleaned = isDm ? message.content.trim() : message.content.replace(new RegExp(`<@!?${message.client.user.id}>`, "g"), "").trim() || message.content;
-      const reply = await buildGhostReply({ guildId, userId: message.author.id, content: cleaned });
-      await sendGhostReply(message.channel, reply);
+      const reply = await buildGhostReply({ guildId, userId: message.author.id, content: cleaned, identity });
+      const sentMessage = await sendGhostReply(message.channel, reply);
 
       if (isDm) {
+        await saveDmGhostHistory(message, sentMessage, reply.text, {
+          guildId,
+          detectedMood: reply.detectedMood || detectedMood,
+          intent: reply.intent || intentResult.intent
+        });
         profile.dmChannelAvailable = true;
         profile.lastDmFailedAt = null;
         await profile.save();

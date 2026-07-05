@@ -86,7 +86,7 @@ async function searchGiphy(mood) {
     const picked = randomItemAvoidingRecent(urls, mood, recentGifUrls);
     return picked;
   } catch (error) {
-    logger.warn("GIPHY lookup failed", { reason: error.message });
+    logger.error("GIPHY lookup failed", { reason: error.message });
     return null;
   } finally {
     clearTimeout(timeout);

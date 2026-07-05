@@ -1,8 +1,18 @@
 const GuildSettings = require("../models/GuildSettings");
+const { detectLocalIntent } = require("../brain/localIntents");
 const { detectMood, extractFood, isCookingRequest, isKissRequest } = require("./moodService");
-const { addFood, getRecentReplies, getRecentUserMessages, saveBotReply, saveMood, saveUserMessage, getOrCreateProfile } = require("./memoryService");
-const { getLocalReply } = require("./responseService");
-const { generateGhostReply, shouldUseAI } = require("./aiService");
+const {
+  addFood,
+  detectNewConversation,
+  getRecentReplies,
+  getRecentUserMessages,
+  saveBotReply,
+  saveMood,
+  saveUserMessage,
+  getOrCreateProfile
+} = require("./memoryService");
+const { saveConversationMemory } = require("../brain/memoryBrain");
+const { generateSmartGhostReply } = require("./brainService");
 const { ensureNaturalEmoji, getMaybeGif, getMaybeSticker } = require("./mediaService");
 const {
   detectWaterIntake,
@@ -16,10 +26,14 @@ const {
 } = require("./waterService");
 const { safeSticker } = require("../utils/safeSend");
 
-async function buildGhostReply({ guildId, userId, content }) {
+async function buildGhostReply({ guildId, userId, content, identity = null }) {
   const settings = await GuildSettings.findOneAndUpdate({ guildId }, { $setOnInsert: { guildId } }, { upsert: true, new: true, setDefaultsOnInsert: true });
   const profile = await getOrCreateProfile(guildId, userId);
   const detectedMood = detectMood(content);
+  const intentResult = detectLocalIntent(content, {
+    lastQuestionAskedByGhost: profile.lastQuestionAskedByGhost,
+    lastMood: profile.lastMood || detectedMood
+  });
   const cookingRequest = isCookingRequest(content.toLowerCase());
   const kissRequest = isKissRequest(content.toLowerCase());
   const waterIntake = detectWaterIntake(content);
@@ -35,6 +49,7 @@ async function buildGhostReply({ guildId, userId, content }) {
   await saveUserMessage(profile, content);
   const recentUserMessages = getRecentUserMessages(profile);
   const recentBotReplies = getRecentReplies(profile);
+  const isNewConversation = detectNewConversation(profile.lastConversationAt, content);
 
   let text;
   if (wantsWaterDisabled(content)) {
@@ -49,18 +64,20 @@ async function buildGhostReply({ guildId, userId, content }) {
     profile.lastWaterResponseAt = new Date();
     await profile.save();
     text = getWaterIntakeReply(waterIntake);
-  } else if (shouldUseAI(content, detectedMood)) {
-    text = await generateGhostReply({
-      userMessage: content,
+  } else {
+    text = await generateSmartGhostReply({
+      message: content,
       detectedMood,
       userProfile: profile,
       guildSettings: settings,
       personaName: settings.personaName,
       recentUserMessages,
-      recentBotReplies
+      recentBotReplies,
+      isNewConversation,
+      userId,
+      food,
+      identity
     });
-  } else {
-    text = getLocalReply(detectedMood, { userMessage: content, food });
   }
 
   text = ensureNaturalEmoji(text, detectedMood);
@@ -70,6 +87,7 @@ async function buildGhostReply({ guildId, userId, content }) {
     await profile.save();
   }
   await saveBotReply(profile, text);
+  await saveConversationMemory({ userId, guildId, userMessage: content, ghostReply: text });
 
   const gifMood = kissRequest ? "kiss" : cookingRequest ? "cooking" : detectedMood;
   const gif = await getMaybeGif(gifMood, settings, { force: cookingRequest || kissRequest });
@@ -79,6 +97,7 @@ async function buildGhostReply({ guildId, userId, content }) {
     text,
     stickerId: getMaybeSticker(detectedMood, settings),
     detectedMood,
+    intent: intentResult.intent,
     profile,
     settings
   };

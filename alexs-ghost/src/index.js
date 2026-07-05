@@ -3,6 +3,7 @@ const path = require("path");
 const mongoose = require("mongoose");
 const { Client, Collection, GatewayIntentBits, Partials } = require("discord.js");
 const { config, validateRuntimeConfig } = require("./config");
+const { startLocalBackupSyncWorker } = require("./services/localBackupSyncService");
 const logger = require("./utils/logger");
 
 validateRuntimeConfig();
@@ -45,6 +46,7 @@ async function start() {
   logger.info("Connected to MongoDB");
   loadCommands();
   loadEvents();
+  startLocalBackupSyncWorker();
   await client.login(config.discordToken);
 }
 

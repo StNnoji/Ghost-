@@ -13,7 +13,9 @@ He supports activation for one selected user, consent before chatting/check-ins,
 - 24-hour soft check-ins, scanned every 30 minutes.
 - Mood detection for happy, sad, angry, tired, sleepy, stressed, lonely, sick, hungry, eating, romantic, teasing, compliment, food, confused, excited, and neutral messages.
 - Food-loving memory system with affection points, favorite foods, and bond levels.
-- Gemini primary AI, Groq backup AI, and local template fallback replies.
+- Local-first ghost brain with Gemini primary AI, Groq backup AI, DeepSeek paid fallback, and local fallback replies.
+- Brain modules for personality, Alex's rules, lore, local intents, topic tracking, compact memory, girlfriend preferences, and response packs.
+- Privacy tools for viewing, clearing, and limiting what Ghosty remembers.
 - Local fallback replies for every mood category.
 - GIF/sticker config hooks with low probability sending.
 - `/list-stickers` helper command for copying server sticker IDs into config.
@@ -40,15 +42,44 @@ DISCORD_TOKEN=
 CLIENT_ID=
 GUILD_ID=
 MONGODB_URI=
+
+OWNER_USER_ID=
+OWNER_DISPLAY_NAME=CG Gamer
+OWNER_NICKNAME=Alex
+
+GIRLFRIEND_USER_ID=
+GIRLFRIEND_DISPLAY_NAME=Helicopter Girl
+GIRLFRIEND_NICKNAME=Alexa
+
 AI_PRIMARY_PROVIDER=gemini
-AI_PRIMARY_API_KEY=
-AI_PRIMARY_MODEL=gemini-2.5-flash
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
 
 AI_BACKUP_PROVIDER=groq
-AI_BACKUP_API_KEY=
-AI_BACKUP_MODEL=llama-3.1-8b-instant
+GROQ_API_KEY=
+GROQ_MODEL=llama-3.1-8b-instant
+
+AI_PAID_FALLBACK_PROVIDER=deepseek
+DEEPSEEK_API_KEY=
+DEEPSEEK_MODEL=deepseek-v4-flash
 
 AI_TIMEOUT_MS=8000
+MAX_AI_OUTPUT_TOKENS=100
+MAX_MEMORY_EXCHANGES=5
+AI_USER_COOLDOWN_MS=12000
+AI_DAILY_SOFT_LIMIT=80
+AI_DAILY_REQUEST_LIMIT=120
+
+LOCAL_BACKUP_ENABLED=true
+LOCAL_BACKUP_MODE=pull
+LOCAL_BACKUP_URL=
+LOCAL_BACKUP_API_KEY=
+LOCAL_BACKUP_SYNC_INTERVAL_MINUTES=60
+DELETE_SERVER_HISTORY_AFTER_SYNC=true
+KEEP_RECENT_MEMORY_EXCHANGES=5
+LOCAL_MONGODB_URI=
+LOCAL_BACKUP_BATCH_SIZE=100
+
 GIPHY_API_KEY=
 
 DEFAULT_REMINDER_HOURS=24
@@ -126,6 +157,15 @@ User commands:
 - `/compliment-ghost` Make Ghosty shy.
 - `/ghost-profile` See your profile, affection, foods, and bond level.
 - `/ghost-dm-mode mode:on/off` Turn private DM conversations on or off.
+- `/what-do-you-remember` See Ghosty's stored summary, topic, profile notes, and recent memory.
+- `/privacy-settings` Alexa-only view of what Ghosty can share with Alex.
+- `/allow-owner-summary` / `/deny-owner-summary` Alexa controls general mood summaries.
+- `/allow-owner-quotes` / `/deny-owner-quotes` Alexa controls exact message previews.
+- `/what-did-you-tell-alex` Alexa sees the last owner report.
+- `/enable-girlfriend-checkins` / `/disable-girlfriend-checkins` Alexa or owner/admin controls two-hour check-ins.
+- `/forget-topic` Clear the current conversation topic and short summary.
+- `/forget-me` Delete your stored Ghosty profile/memory for the current context.
+- `/forget-chat-history` Delete your stored full chat history backup queue and recent conversation memory.
 - `/ghost-help` Show commands, consent, and boundaries.
 - `/list-stickers` List server sticker names and IDs for `config/stickers.json`.
 
@@ -135,6 +175,12 @@ Admin commands:
 - `/deactivate-ghost user:` Deactivate Ghosty for a selected user.
 - `/ghost-status user:` View active status, consent, DM mode, mood, reminders, affection, food count, and bond level.
 - `/ghost-settings` View or change reminders, DMs, public reminders, GIFs, stickers, romantic mode, cute intensity, nickname, and natural chat.
+- `/owner-report` Owner-only Alexa status summary.
+- `/send-ghost-checkin` Owner-only soft check-in request for Alexa.
+- `/set-girlfriend-checkins interval_hours:` Owner/admin sets the no-message check-in interval.
+- `/set-gf-note user note:` Save a safe girlfriend profile note using `key:value`.
+- `/remove-gf-note user key:` Clear a saved girlfriend profile field.
+- `/gf-profile user:` View saved girlfriend profile notes.
 - `/set-ghost-channel channel:` Choose the channel where natural chat may happen.
 
 ## Consent Flow
@@ -163,21 +209,111 @@ Ghosty replies when the activated and consented user:
 
 Natural channel replies are rate-limited and capped at 5 natural replies per 10 minutes per user.
 
-When DM mode is on, normal cute ghost conversations happen in DMs. Server natural chat stays quiet for that user, and `/talk` sends Ghosty's reply privately when possible.
+When DM mode is on, every DM from the activated and consented user is treated as part of the ongoing conversation. The user does not need to mention the bot or hit Discord's reply button. Ghosty stores the last 5 exchanges, a short memory summary, the last topic, the last question Ghosty asked, and the last mood so short replies like "yes", "no", "biryani", "nothing", or "I'm fine" can make sense in context.
+
+Ghosty does not intentionally store sensitive details such as passwords, addresses, private secrets, API keys, payment details, or explicit content. If the user says "don't remember that" or "forget what I said," the user message is not saved into conversation memory or the short summary.
+
+## Identity And Owner Privacy
+
+Identity is based on Discord user IDs, not display names. Set `OWNER_USER_ID` for CG Gamer/Alex and `GIRLFRIEND_USER_ID` for Helicopter Girl/Alexa. Display names and nicknames are only used for friendly text.
+
+Owner DMs use creator mode: respectful, loyal, concise, and sometimes "sir." Alexa DMs use girlfriend mode: cute, shy, playful, romantic but safe, caring, and food-loving.
+
+Owner reports never reveal exact private messages by default. Alexa controls sharing with:
+
+- `/allow-owner-summary` and `/deny-owner-summary`
+- `/allow-owner-quotes` and `/deny-owner-quotes`
+- `/privacy-settings`
+- `/what-did-you-tell-alex`
+
+During activation, Ghosty asks Alexa whether general mood summaries and exact previews are allowed. Defaults are private unless she explicitly allows them.
+
+## Alexa Check-Ins
+
+Alexa has a special no-message check-in system. If she has consented, DM mode is on, `girlfriendCheckInsEnabled` is true, quiet hours are inactive, and she has not messaged Ghosty for the configured interval, Ghosty can send a cute DM check-in. Defaults are 2 hours, max 6 per day, quiet hours 23:00-09:00.
+
+If Alexa says "stop", "don't remind me", "leave me alone", or similar, girlfriend check-ins are disabled automatically.
+
+## Chat History Backup
+
+DM chat history is stored immediately in the hosted bot database before any local backup sync runs, but hosted storage is only a temporary sync queue. Your local PC MongoDB is the permanent archive. Normal replies still use only the last 5 exchanges plus compact summaries to keep AI costs low.
+
+Each saved chat history record has a unique `messageId`, role, mood, intent, channel metadata, `syncStatus`, `syncedAt`, `syncAttempts`, and `lastSyncError`. Pending/failed records are never deleted by the sync worker.
+
+Preferred local backup mode is pull:
+
+```bash
+npm run backup:pull
+```
+
+Run that command on your local PC with:
+
+```env
+MONGODB_URI=your-hosted-bot-mongodb-uri
+LOCAL_MONGODB_URI=your-local-pc-mongodb-uri
+LOCAL_BACKUP_BATCH_SIZE=100
+```
+
+The pull script copies pending hosted chat messages into local MongoDB, acknowledges only successfully saved message IDs, marks them synced in the hosted database, then deletes those synced full-history messages from hosted storage when `DELETE_SERVER_HISTORY_AFTER_SYNC=true`. This avoids exposing MongoDB publicly.
+
+Optional push mode is available only if you provide a protected HTTPS endpoint:
+
+```env
+LOCAL_BACKUP_ENABLED=true
+LOCAL_BACKUP_MODE=push
+LOCAL_BACKUP_URL=https://your-local-backup-endpoint.example.com/chat-history
+LOCAL_BACKUP_API_KEY=strong-private-token
+LOCAL_BACKUP_SYNC_INTERVAL_MINUTES=60
+DELETE_SERVER_HISTORY_AFTER_SYNC=true
+```
+
+Do not expose MongoDB directly to the internet. The bot does not log private message content during sync; it only logs counts and error reasons. If the local PC is offline or local MongoDB save fails, hosted messages stay pending/failed and are retried later. If only some messages are acknowledged, only those acknowledged IDs are deleted from hosted storage.
+
+`/forget-me` also creates a local deletion request. The local pull script deletes that user's local archive and acknowledges the request the next time it runs.
+
+## Brain Files
+
+- `src/brain/ghostPersonality.js`
+- `src/brain/ghostLore.js`
+- `src/brain/localIntents.js`
+- `src/brain/responsePacks.js`
+- `src/brain/girlfriendProfile.js`
+- `src/brain/alexRules.js`
+- `src/brain/topicBrain.js`
+- `src/brain/memoryBrain.js`
+- `src/services/brainService.js`
+
+Local response data lives in `data/`. The response pack loader expands curated seed replies to 50+ local variants per major category, keeping common messages local and cheap.
 
 ## AI Providers
 
-Alex's Ghost first tries Gemini, then Groq, then local templates:
+Alex's Ghost does local intent detection first, so simple greetings, good morning/night, kisses, hugs, touching/poking, teasing, compliments, food, food received, simple tired/sad replies, 24-hour check-ins, lonely/bored moods, romantic messages, and obvious check-in replies use local templates without spending AI requests.
 
+AI is used for messages longer than simple local intent, questions, complex emotional messages, unclear natural conversation tied to recent memory, short answers that need the last Ghost question, or when local replies would become repetitive. Provider order:
+
+- Local ghost brain first
 - `AI_PRIMARY_PROVIDER=gemini`
-- `AI_PRIMARY_API_KEY=`
-- `AI_PRIMARY_MODEL=gemini-2.5-flash`
+- `GEMINI_API_KEY=`
+- `GEMINI_MODEL=gemini-2.5-flash`
 - `AI_BACKUP_PROVIDER=groq`
-- `AI_BACKUP_API_KEY=`
-- `AI_BACKUP_MODEL=llama-3.1-8b-instant`
+- `GROQ_API_KEY=`
+- `GROQ_MODEL=llama-3.1-8b-instant`
+- `AI_PAID_FALLBACK_PROVIDER=deepseek`
+- `DEEPSEEK_API_KEY=`
+- `DEEPSEEK_MODEL=deepseek-v4-flash`
 - `AI_TIMEOUT_MS=8000`
+- `MAX_AI_OUTPUT_TOKENS=100`
+- `MAX_MEMORY_EXCHANGES=5`
 
-If Gemini hits a rate limit, timeout, 429, 503, or empty response, Ghosty tries Groq. If Groq also fails, he uses local cute fallback replies and keeps working.
+If Gemini fails, rate-limits, times out, or returns an empty response, Ghosty tries Groq, then DeepSeek. If all AI providers fail or no keys are configured, he uses local cute fallback replies and keeps working.
+
+Rate protection:
+
+- `AI_USER_COOLDOWN_MS=12000`
+- `AI_DAILY_SOFT_LIMIT=80`
+- `AI_DAILY_REQUEST_LIMIT=120`
+
+When the soft daily limit is reached, shorter non-question messages switch back to local replies. When the daily request limit is reached, all normal chat uses local replies until the next day.
 
 ## GIFs, Stickers, And Emojis
 
@@ -208,8 +344,9 @@ Use a Node.js host that supports long-running processes and environment variable
 
 - `DISCORD_TOKEN`
 - `MONGODB_URI`
-- `AI_PRIMARY_API_KEY`
-- `AI_BACKUP_API_KEY`
+- `GEMINI_API_KEY`
+- `GROQ_API_KEY`
+- `DEEPSEEK_API_KEY`
 - `GIPHY_API_KEY`
 
 Run once after deploy:

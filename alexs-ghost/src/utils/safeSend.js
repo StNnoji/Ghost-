@@ -25,7 +25,7 @@ async function safeSend(target, payload) {
   try {
     return await target.send(payload);
   } catch (error) {
-    logger.warn("Failed to send message", { reason: error.message });
+    logger.error("Failed to send message", { reason: error.message });
     return null;
   }
 }
@@ -35,7 +35,7 @@ async function safeSticker(channel, stickerId) {
   try {
     return await channel.send({ stickers: [stickerId] });
   } catch (error) {
-    logger.warn("Failed to send sticker", { stickerId, reason: error.message });
+    logger.error("Failed to send sticker", { stickerId, reason: error.message });
     return null;
   }
 }

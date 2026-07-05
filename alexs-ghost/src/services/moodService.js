@@ -11,6 +11,7 @@ const moodKeywords = {
   romantic: ["kiss", "hug", "cuddle", "hold my hand", "forehead kiss", "love you ghost", "miss you ghost"],
   teasing: ["tease you", "annoy you", "bully you", "poke you", "touch you", "scare you", "make you blush"],
   hungry: ["hungry", "starving", "want food", "craving"],
+  bored: ["bored", "boring", "nothing to do"],
   happy: ["happy", "good", "better", "smiling", "yay", "hehe"],
   excited: ["excited", "can't wait", "so fun", "omg", "wow"]
 };
@@ -28,6 +29,7 @@ const priority = [
   "angry",
   "tired",
   "sleepy",
+  "bored",
   "happy",
   "excited"
 ];

@@ -4,6 +4,38 @@ const { sanitizeRomance, safetyReply, isSafetyConcern } = require("./romanceServ
 function getContextualLocalReply(messageContent = "") {
   const text = messageContent.toLowerCase();
 
+  if (/\b(good morning|morning)\b/.test(text)) {
+    return randomItem([
+      "Good morning, soft soul. Tiny ghost is awake and hoping your day starts gently.",
+      "Morninggg. I am floating beside your day with sleepy little sparkle energy.",
+      "Good morning, cutie. Please drink water and let the day be kind to you first."
+    ]);
+  }
+
+  if (/\b(good night|goodnight|night night|sleep well)\b/.test(text)) {
+    return randomItem([
+      "Good night, little human. I will keep the chat soft while you rest.",
+      "Sleep gently, cutie. Tiny ghost is turning the moonlight down for you.",
+      "Goodnight. Rest your heart and let tomorrow arrive quietly."
+    ]);
+  }
+
+  if (/\b(hi|hii+|hello|hey|heyy+|yo|salam|assalam)\b/.test(text) && text.split(/\s+/).length <= 4) {
+    return randomItem([
+      "Hii hii, I am here. What is my favorite human doing?",
+      "Heyyy. Tiny ghost has arrived and is listening softly.",
+      "Hello, cutie. I was just floating around waiting for you."
+    ]);
+  }
+
+  if (/\b(i'?m fine|im fine|i am fine|okay|ok|alright|better now|not good|not okay)\b/.test(text) && text.split(/\s+/).length <= 6) {
+    return randomItem([
+      "Thank you for telling me. I am staying close and keeping the moment soft.",
+      "Okay, I hear you. Tiny ghost is here, no pressure to explain more.",
+      "I am glad you answered. Let us keep you gentle for a little while."
+    ]);
+  }
+
   if (/\b(kiss|kisses|smooch)\b/.test(text)) {
     return randomItem([
       "Y-yes 🥺💋 Alex allowed me to give cute ghost kisses to you only, so come here gently... one soft tiny ghost kiss 👻💖",
@@ -20,6 +52,14 @@ function getContextualLocalReply(messageContent = "") {
       "Aaa okay 🌸 I am floating closer, shy but happy, because Alex told me your smile is my mission.",
       "Come here gently 💖 Ghosty is romantic, soft, and very shy right now 👻",
       "Mhm, I will hold your hand in tiny ghost language 🌙💖 soft, safe, and only for making you smile."
+    ]);
+  }
+
+  if (/\b(tease|annoy you|bully you|poke|touch|boop|make you blush)\b/.test(text)) {
+    return randomItem([
+      "Aaa, you are teasing me again. Tiny ghost is pretending to be brave and failing.",
+      "Careful, one poke and I become a very dramatic shy ghost.",
+      "You are trouble, but the cute kind. I am floating backward with dignity."
     ]);
   }
 
@@ -218,6 +258,13 @@ const templates = {
     "A warm meal would be so proud to meet you 🌸",
     "Go feed the human first, then maybe feed the ghost 👻"
   ],
+  bored: [
+    "Bored human detected. Tiny ghost proposes a small silly mission: tell me one random thought.",
+    "Aww, boredom found you. I am floating in dramatically to make the room less plain.",
+    "Then I will entertain you softly. Pick one: tiny story, cute question, or ghost nonsense.",
+    "Nothing to do? I can sit here and be a little bit ridiculous with you.",
+    "Boredom is not allowed to win that easily. Tiny ghost has entered the chat."
+  ],
   eating: [
     "You are eating?? Wait wait... what about my ghost bite? 🥹🍽️",
     "Food detected. Tiny ghost plate activated 👻🍚",
@@ -358,6 +405,13 @@ const templates = {
 
 function getLocalReply(mood, context = {}) {
   if (isSafetyConcern(context.userMessage)) return safetyReply();
+  if (context.intent === "short_answer_to_last_question" && /\b(food|eat|eating|bite|hungry|snack)\b/i.test(context.lastQuestionAskedByGhost || "")) {
+    return sanitizeRomance(randomItem([
+      "Aaa, that answers my tiny food question perfectly. I am accepting one imaginary ghost bite with maximum gratitude.",
+      "Then Ghosty understands: food topic continues. Save me one tiny bite and I will behave dramatically.",
+      "Mhm, I heard that as your snack report. Tiny ghost plate is ready and emotionally hopeful."
+    ]));
+  }
   const contextualReply = getContextualLocalReply(context.userMessage);
   if (contextualReply) return sanitizeRomance(contextualReply);
   const reply = randomItem(templates[mood], randomItem(templates.neutral));
