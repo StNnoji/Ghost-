@@ -4,7 +4,7 @@ const UserGhostProfile = require("../models/UserGhostProfile");
 const { detectLocalIntent } = require("../brain/localIntents");
 const { config } = require("../config");
 const { buildGhostReply, sendGhostReply } = require("../services/chatService");
-const { saveGhostMessage, saveUserMessage } = require("../services/chatHistoryService");
+const { attachGhostReplyToUserMessage, saveGhostMessage, saveUserMessage } = require("../services/chatHistoryService");
 const { shouldDisableCheckIns } = require("../services/checkInService");
 const { getUserIdentity } = require("../services/identityService");
 const { detectMood } = require("../services/moodService");
@@ -23,7 +23,7 @@ async function isReplyToBot(message) {
 }
 
 async function saveDmUserHistory(message, { guildId, cleaned, detectedMood, intent }) {
-  await saveUserMessage(message, {
+  return saveUserMessage(message, {
     guildId,
     channelType: "DM",
     content: cleaned,
@@ -32,18 +32,28 @@ async function saveDmUserHistory(message, { guildId, cleaned, detectedMood, inte
   }).catch((error) => logger.error("Failed to save DM user chat history", { reason: error?.message }));
 }
 
-async function saveDmGhostHistory(message, sentMessage, replyText, { guildId, detectedMood, intent }) {
+async function saveDmGhostHistory(message, sentMessage, replyText, { guildId, cleaned, detectedMood, intent }) {
   if (!sentMessage?.id) return;
   await saveGhostMessage(replyText, {
     messageId: sentMessage.id,
     userId: message.author.id,
+    user: message.author,
+    botUser: sentMessage.author || message.client.user,
     guildId,
     channelId: message.channel.id,
     channelType: "DM",
+    conversationId: message.id,
+    userMessageId: message.id,
+    userContent: cleaned || message.content,
     mood: detectedMood,
     intent,
     createdAt: sentMessage.createdAt || new Date()
   }).catch((error) => logger.error("Failed to save DM ghost chat history", { reason: error?.message }));
+  await attachGhostReplyToUserMessage(message.id, {
+    messageId: sentMessage.id,
+    botUser: sentMessage.author || message.client.user,
+    ghostReply: replyText
+  }).catch((error) => logger.error("Failed to attach DM ghost reply to user chat history", { reason: error?.message }));
 }
 
 module.exports = {
@@ -69,7 +79,7 @@ module.exports = {
           const text = await buildOwnerDmReply(cleaned);
           logger.info("Replied with owner status report", { intent });
           const sentMessage = await message.channel.send(text);
-          await saveDmGhostHistory(message, sentMessage, text, { guildId: null, detectedMood, intent });
+          await saveDmGhostHistory(message, sentMessage, text, { guildId: null, cleaned, detectedMood, intent });
           return;
         }
 
@@ -77,6 +87,7 @@ module.exports = {
         const sentMessage = await sendGhostReply(message.channel, reply);
         await saveDmGhostHistory(message, sentMessage, reply.text, {
           guildId: ownerGuildId,
+          cleaned,
           detectedMood: reply.detectedMood || detectedMood,
           intent: reply.intent || intent
         });
@@ -139,6 +150,7 @@ module.exports = {
       if (isDm) {
         await saveDmGhostHistory(message, sentMessage, reply.text, {
           guildId,
+          cleaned,
           detectedMood: reply.detectedMood || detectedMood,
           intent: reply.intent || intentResult.intent
         });

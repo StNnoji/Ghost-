@@ -236,7 +236,7 @@ If Alexa says "stop", "don't remind me", "leave me alone", or similar, girlfrien
 
 DM chat history is stored immediately in the hosted bot database before any local backup sync runs, but hosted storage is only a temporary sync queue. Your local PC MongoDB is the permanent archive. Normal replies still use only the last 5 exchanges plus compact summaries to keep AI costs low.
 
-Each saved chat history record has a unique `messageId`, role, mood, intent, channel metadata, `syncStatus`, `syncedAt`, `syncAttempts`, and `lastSyncError`. Pending/failed records are never deleted by the sync worker.
+Each saved chat history record has a unique `messageId`, role, mood, intent, channel metadata, `syncStatus`, `syncedAt`, `syncAttempts`, and `lastSyncError`. It also stores readable archive fields like `senderUsername`, `senderDisplayName`, `userContent`, and `ghostReply` so Compass can show who texted and what Ghost replied without manually joining two rows. Pending/failed records are never deleted by the sync worker.
 
 Preferred local backup mode is pull:
 
@@ -253,6 +253,18 @@ LOCAL_BACKUP_BATCH_SIZE=100
 ```
 
 The pull script copies pending hosted chat messages into local MongoDB, acknowledges only successfully saved message IDs, marks them synced in the hosted database, then deletes those synced full-history messages from hosted storage when `DELETE_SERVER_HISTORY_AFTER_SYNC=true`. This avoids exposing MongoDB publicly.
+
+If you already pulled older rows before the readable archive fields existed, enrich the local copy once:
+
+```bash
+npm run backup:enrich
+```
+
+On Windows:
+
+```bash
+npm.cmd run backup:enrich
+```
 
 Optional push mode is available only if you provide a protected HTTPS endpoint:
 

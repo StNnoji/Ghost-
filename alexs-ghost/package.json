@@ -7,7 +7,8 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "deploy": "node src/deploy-commands.js",
-    "backup:pull": "node scripts/localBackupPull.js"
+    "backup:pull": "node scripts/localBackupPull.js",
+    "backup:enrich": "node scripts/localBackupEnrich.js"
   },
   "keywords": [
     "discord",
