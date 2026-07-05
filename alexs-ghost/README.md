@@ -304,6 +304,8 @@ Provider order:
 
 If Gemini fails, rate-limits, times out, or returns an empty response, Ghosty tries Groq, then DeepSeek. If the user complains about the last answer, Ghosty tracks that complaint in memory for the running process and escalates to the next provider instead of repeating the same source. If all AI providers fail or no keys are configured, he uses local cute fallback replies and keeps working.
 
+AI chat replies are not cached. Each normal chat reply asks the selected provider again so a bad answer is not reused.
+
 The console logs the reply source for every normal reply path:
 
 - `Replied with Gemini`

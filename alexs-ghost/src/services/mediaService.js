@@ -12,13 +12,7 @@ function readConfig(name) {
   }
 }
 
-const emojis = readConfig("emojis.json");
 const stickers = readConfig("stickers.json");
-const naturalEmojiPool = ["👻", "🌸", "🥺", "💖", "🌙", "✨", "💋", "🍚", "🍪"];
-
-function getEmoji(category) {
-  return randomItem(emojis[category] || emojis.cute || []);
-}
 
 async function getMaybeGif(category, settings, options = {}) {
   if (!settings?.gifsEnabled) return null;
@@ -31,11 +25,4 @@ function getMaybeSticker(category, settings) {
   return randomItem(stickers[category] || stickers.comfort || []);
 }
 
-function ensureNaturalEmoji(text = "", category = "neutral") {
-  const emojiMatches = text.match(/\p{Emoji_Presentation}|\p{Extended_Pictographic}/gu) || [];
-  if (emojiMatches.length > 0) return text;
-  const emoji = getEmoji(category) || randomItem(naturalEmojiPool, "👻");
-  return `${text} ${emoji}`.trim();
-}
-
-module.exports = { getEmoji, getMaybeGif, getMaybeSticker, ensureNaturalEmoji };
+module.exports = { getMaybeGif, getMaybeSticker };

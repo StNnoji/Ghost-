@@ -13,7 +13,7 @@ const {
 } = require("./memoryService");
 const { saveConversationMemory } = require("../brain/memoryBrain");
 const { generateSmartGhostReply } = require("./brainService");
-const { ensureNaturalEmoji, getMaybeGif, getMaybeSticker } = require("./mediaService");
+const { getMaybeGif, getMaybeSticker } = require("./mediaService");
 const {
   detectWaterIntake,
   getWaterDisabledReply,
@@ -84,7 +84,6 @@ async function buildGhostReply({ guildId, userId, content, identity = null }) {
     });
   }
 
-  text = ensureNaturalEmoji(text, detectedMood);
   if (shouldAskWater(profile, content, detectedMood)) {
     text = `${text}\n\n${getWaterQuestion()}`;
     profile.lastWaterAskedAt = new Date();

@@ -3,8 +3,6 @@ const { getLocalReply } = require("./responseService");
 const { sanitizeRomance, isSafetyConcern, safetyReply } = require("./romanceService");
 const logger = require("../utils/logger");
 
-const COMMON_REPLY_CACHE_LIMIT = 80;
-const aiReplyCache = new Map();
 const userAiUsage = new Map();
 const userAnswerComplaints = new Map();
 const lastReplySourceByUser = new Map();
@@ -44,30 +42,6 @@ function resetDailyUsageIfNeeded() {
   if (dailyAiUsage.day !== today) {
     dailyAiUsage.day = today;
     dailyAiUsage.count = 0;
-  }
-}
-
-function getCacheKey(messageContent = "", detectedMood = "neutral") {
-  return `${detectedMood}:${messageContent.toLowerCase().replace(/\s+/g, " ").trim()}`.slice(0, 220);
-}
-
-function getCachedReply(messageContent, detectedMood) {
-  const key = getCacheKey(messageContent, detectedMood);
-  const cached = aiReplyCache.get(key);
-  if (!cached) return null;
-  aiReplyCache.delete(key);
-  aiReplyCache.set(key, cached);
-  if (typeof cached === "string") return { reply: cached, source: "AI cache" };
-  return cached;
-}
-
-function setCachedReply(messageContent, detectedMood, reply, sourceMeta) {
-  const key = getCacheKey(messageContent, detectedMood);
-  if (!key || !reply) return;
-  const meta = typeof sourceMeta === "string" ? { source: sourceMeta } : sourceMeta || {};
-  aiReplyCache.set(key, { reply, ...meta });
-  while (aiReplyCache.size > COMMON_REPLY_CACHE_LIMIT) {
-    aiReplyCache.delete(aiReplyCache.keys().next().value);
   }
 }
 
@@ -323,6 +297,8 @@ ${identityContext ? `\nIdentity context: ${identityContext}\n` : ""}
 Rules:
 - Keep every reply under 80 words.
 - Match her mood and exact message.
+- Answer identity questions with the configured identity facts from the identity context. Do not guess names.
+- Default to plain text with no decorative emojis. Use at most one emoji only when the user asks for cute, romantic, playful, or emoji style.
 - Use local ghost affection only in wholesome fictional ways: kisses, hugs, cuddles, teasing, hand-holding, and tiny ghost shyness. Never be sexual, possessive, manipulative, or boundaryless.
 - If she asks about cooking, roleplay as a tiny capable ghost chef.
 - Never say "as an AI" or "how can I assist you."
@@ -512,13 +488,6 @@ async function generateGhostReply({
     return localGhostReply(detectedMood, { ...context, reason: hasConfiguredAiProvider() ? "AI daily budget exhausted" : "no AI provider is configured" });
   }
 
-  const cached = getCachedReply(userMessage, detectedMood);
-  if (cached) {
-    logger.info(`Replied with ${cached.source || "AI cache"}`, { cached: true });
-    rememberReplySource(userId, { source: cached.source || "AI cache", provider: cached.provider || "cache", model: cached.model });
-    return cached.reply;
-  }
-
   const prompt = buildCompactSystemPrompt({
     detectedMood,
     userProfile,
@@ -568,11 +537,6 @@ async function generateGhostReply({
       if (reply) {
         const cleanReply = sanitizeRomance(limitReplyWords(reply));
         const source = getProviderDisplayName(providerConfig.provider);
-        setCachedReply(userMessage, detectedMood, cleanReply, {
-          source,
-          provider: providerConfig.provider,
-          model: providerConfig.model
-        });
         recordAiRequest(userId);
         rememberReplySource(userId, { source, provider: providerConfig.provider, model: providerConfig.model });
         logProviderReply(providerConfig, {

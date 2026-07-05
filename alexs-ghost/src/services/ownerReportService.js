@@ -76,7 +76,13 @@ function buildOwnerReportText(profile, { includeGreeting = true } = {}) {
 }
 
 function isOwnerStatusQuestion(message = "") {
-  return /\b(have you been talking to|how is she|did she reply|what did she say|is alexa okay|when did she last|alexa|helicopter girl|check.?in|report)\b/i.test(message);
+  const text = String(message || "").toLowerCase();
+  if (!text.trim()) return false;
+  if (/\b(owner[-\s]?report|status report|status summary|privacy status|report)\b/i.test(text)) return true;
+  if (/\b(check.?in|last dm|last message|last reply|last replied|last talked|when did she last|did she reply|what did she say|have you been talking to)\b/i.test(text)) return true;
+  if (/\b(how is she|is she okay|is alexa okay|how is alexa|alexa okay)\b/i.test(text)) return true;
+  if (/\b(alexa|helicopter girl|she)\b/i.test(text) && /\b(status|active|consent|consented|mood|summary|privacy|dm|reply|replied|message|check.?in)\b/i.test(text)) return true;
+  return false;
 }
 
 async function buildOwnerDmReply(message = "") {
