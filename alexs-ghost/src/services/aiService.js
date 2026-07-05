@@ -55,16 +55,41 @@ function getCachedReply(messageContent, detectedMood) {
   if (!cached) return null;
   aiReplyCache.delete(key);
   aiReplyCache.set(key, cached);
+  if (typeof cached === "string") return { reply: cached, source: "AI cache" };
   return cached;
 }
 
-function setCachedReply(messageContent, detectedMood, reply) {
+function setCachedReply(messageContent, detectedMood, reply, source) {
   const key = getCacheKey(messageContent, detectedMood);
   if (!key || !reply) return;
-  aiReplyCache.set(key, reply);
+  aiReplyCache.set(key, { reply, source });
   while (aiReplyCache.size > COMMON_REPLY_CACHE_LIMIT) {
     aiReplyCache.delete(aiReplyCache.keys().next().value);
   }
+}
+
+function getProviderDisplayName(provider = "") {
+  const names = {
+    gemini: "Gemini",
+    groq: "Groq",
+    deepseek: "DeepSeek",
+    openrouter: "OpenRouter",
+    cerebras: "Cerebras"
+  };
+  return names[String(provider).toLowerCase()] || provider || "AI";
+}
+
+function logProviderReply(providerConfig, meta = {}) {
+  logger.info(`Replied with ${getProviderDisplayName(providerConfig.provider)}`, {
+    slot: providerConfig.slot,
+    provider: providerConfig.provider,
+    model: providerConfig.model,
+    ...meta
+  });
+}
+
+function logLocalDataReply(reason, meta = {}) {
+  logger.info("Replied with local data", { reason, ...meta });
 }
 
 function detectLocalIntent(messageContent = "", detectedMood = "neutral", options = {}) {
@@ -129,8 +154,9 @@ function recordAiRequest(userId) {
 function shouldUseAI(messageContent = "", detectedMood = "neutral", options = {}) {
   const trimmed = messageContent.trim();
   const intent = detectLocalIntent(trimmed, detectedMood, options);
-  if (isSimpleLocalMessage(trimmed, detectedMood, options)) return false;
   if (isAiBudgetExhausted()) return false;
+  if (shouldForceAI(trimmed, intent)) return true;
+  if (isSimpleLocalMessage(trimmed, detectedMood, options)) return false;
   if (isAiBudgetLow() && trimmed.length < 120 && !trimmed.includes("?")) return false;
   if (isAiCoolingDown(options.userId) && trimmed.length < 120 && !isRepeatedByLocalArrays(options.recentBotReplies)) return false;
   if (intent === "short_answer_to_last_question") return true;
@@ -143,6 +169,14 @@ function shouldUseAI(messageContent = "", detectedMood = "neutral", options = {}
   if (["romantic", "teasing"].includes(detectedMood) && trimmed.length > 60) return true;
   if (isRepeatedByLocalArrays(options.recentBotReplies)) return true;
   return false;
+}
+
+function shouldForceAI(messageContent = "", intent = null) {
+  const trimmed = String(messageContent || "").trim();
+  if (!trimmed) return false;
+  if (intent === "question" && /\b(personality|about me|about my|remember about me|what do you know about me)\b/i.test(trimmed)) return true;
+  return /\b(tell me|explain|describe|summari[sz]e|analy[sz]e|what do you think|give me advice|help me understand)\b/i.test(trimmed)
+    || /\b(my personality|about my personality|about me|who am i|what am i like|what do you know about me|what do you remember about me)\b/i.test(trimmed);
 }
 
 function isRateLimitError(error) {
@@ -424,6 +458,10 @@ function limitReplyWords(reply = "", maxWords = 80) {
 }
 
 function localGhostReply(detectedMood, context = {}) {
+  logLocalDataReply(context.reason || "local fallback", {
+    intent: context.intent || "unknown",
+    mood: detectedMood || "neutral"
+  });
   return getLocalFallbackReply(detectedMood, context);
 }
 
@@ -444,16 +482,22 @@ async function generateGhostReply({
   userId,
   food
 }) {
-  if (isSafetyConcern(userMessage)) return safetyReply();
+  if (isSafetyConcern(userMessage)) {
+    logLocalDataReply("safety reply", { mood: detectedMood || "neutral" });
+    return safetyReply();
+  }
 
   const intent = detectLocalIntent(userMessage, detectedMood, { lastQuestionAskedByGhost });
   const context = { userMessage, food, intent, lastTopic, lastQuestionAskedByGhost };
   if (!shouldUseAI(userMessage, detectedMood, { userId, recentBotReplies, lastTopic, lastQuestionAskedByGhost })) {
-    return localGhostReply(detectedMood, context);
+    return localGhostReply(detectedMood, { ...context, reason: "AI routing chose local reply" });
   }
 
   const cached = getCachedReply(userMessage, detectedMood);
-  if (cached) return cached;
+  if (cached) {
+    logger.info(`Replied with ${cached.source || "AI cache"}`, { cached: true });
+    return cached.reply;
+  }
 
   const prompt = buildCompactSystemPrompt({
     detectedMood,
@@ -482,7 +526,6 @@ async function generateGhostReply({
       continue;
     }
     try {
-      recordAiRequest(userId);
       const reply = await callProvider(providerConfig.provider, {
         prompt,
         userMessage,
@@ -494,7 +537,10 @@ async function generateGhostReply({
       });
       if (reply) {
         const cleanReply = sanitizeRomance(limitReplyWords(reply));
-        setCachedReply(userMessage, detectedMood, cleanReply);
+        const source = getProviderDisplayName(providerConfig.provider);
+        setCachedReply(userMessage, detectedMood, cleanReply, source);
+        recordAiRequest(userId);
+        logProviderReply(providerConfig);
         return cleanReply;
       }
       const error = new Error(`${providerConfig.provider} returned an empty response`);
@@ -513,7 +559,7 @@ async function generateGhostReply({
       hasApiKey: Boolean(providerConfig.apiKey)
     }))
   });
-  return localGhostReply(detectedMood, context);
+  return localGhostReply(detectedMood, { ...context, reason: "all AI providers failed" });
 }
 
 module.exports = {
@@ -524,6 +570,7 @@ module.exports = {
   getLocalFallbackReply,
   localGhostReply,
   shouldUseAI,
+  shouldForceAI,
   detectLocalIntent,
   isRateLimitError,
   isTimeoutError,

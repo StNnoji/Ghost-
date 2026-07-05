@@ -10,6 +10,7 @@ const { buildTopicState } = require("../brain/topicBrain");
 const { getLocalBrainReply } = require("../brain/responsePacks");
 const { isSafetyConcern, safetyReply, sanitizeRomance } = require("./romanceService");
 const { randomItem } = require("../utils/random");
+const logger = require("../utils/logger");
 
 const localOnlyIntents = new Set([
   "greeting",
@@ -110,7 +111,10 @@ async function generateSmartGhostReply({
   isNewConversation = false,
   identity = null
 }) {
-  if (isSafetyConcern(message)) return safetyReply();
+  if (isSafetyConcern(message)) {
+    logger.info("Replied with local data", { reason: "safety reply", mood: detectedMood || "neutral" });
+    return safetyReply();
+  }
 
   const memoryContext = getMemoryContext(userProfile);
   const mood = detectedMood || detectMood(message);
@@ -128,6 +132,11 @@ async function generateSmartGhostReply({
 
   if (localResponseIsEnough(message, intentResult, memoryContext, recentBotReplies)) {
     const identityReply = getIdentityLocalReply(identity, intentResult.intent);
+    logger.info("Replied with local data", {
+      reason: identityReply ? "identity local reply" : "local intent reply",
+      intent: intentResult.intent,
+      mood
+    });
     if (identityReply) return sanitizeRomance(identityReply);
     return sanitizeRomance(getLocalBrainReply(intentResult.intent, {
       mood,

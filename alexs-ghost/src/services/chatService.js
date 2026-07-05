@@ -25,6 +25,7 @@ const {
   wantsWaterEnabled
 } = require("./waterService");
 const { safeSticker } = require("../utils/safeSend");
+const logger = require("../utils/logger");
 
 async function buildGhostReply({ guildId, userId, content, identity = null }) {
   const settings = await GuildSettings.findOneAndUpdate({ guildId }, { $setOnInsert: { guildId } }, { upsert: true, new: true, setDefaultsOnInsert: true });
@@ -55,14 +56,17 @@ async function buildGhostReply({ guildId, userId, content, identity = null }) {
   if (wantsWaterDisabled(content)) {
     profile.waterReminderDisabled = true;
     await profile.save();
+    logger.info("Replied with local data", { reason: "water reminder disabled reply", intent: intentResult.intent, mood: detectedMood });
     text = getWaterDisabledReply();
   } else if (wantsWaterEnabled(content)) {
     profile.waterReminderDisabled = false;
     await profile.save();
+    logger.info("Replied with local data", { reason: "water reminder enabled reply", intent: intentResult.intent, mood: detectedMood });
     text = getWaterEnabledReply();
   } else if (waterIntake) {
     profile.lastWaterResponseAt = new Date();
     await profile.save();
+    logger.info("Replied with local data", { reason: "water intake reply", intent: intentResult.intent, mood: detectedMood });
     text = getWaterIntakeReply(waterIntake);
   } else {
     text = await generateSmartGhostReply({
