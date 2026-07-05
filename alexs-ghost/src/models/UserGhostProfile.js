@@ -57,7 +57,7 @@ const userGhostProfileSchema = new mongoose.Schema(
     quietHoursEnabled: { type: Boolean, default: true },
     quietHoursStart: { type: String, default: "23:00" },
     quietHoursEnd: { type: String, default: "09:00" },
-    maxDailyCheckIns: { type: Number, default: 6 },
+    maxDailyCheckIns: { type: Number, default: 8 },
     girlfriendProfile: {
       preferredName: { type: String, default: "" },
       nicknames: { type: [String], default: [] },

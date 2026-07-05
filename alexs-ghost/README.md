@@ -10,7 +10,7 @@ He supports activation for one selected user, consent before chatting/check-ins,
 - MongoDB + Mongoose profiles and guild settings.
 - Consent-first activation flow with buttons.
 - Optional private DM mode for the activated user.
-- 24-hour soft check-ins, scanned every 30 minutes.
+- Scheduled girlfriend check-ins, defaulting to every 2 hours and scanned every 30 minutes.
 - Mood detection for happy, sad, angry, tired, sleepy, stressed, lonely, sick, hungry, eating, romantic, teasing, compliment, food, confused, excited, and neutral messages.
 - Food-loving memory system with affection points, favorite foods, and bond levels.
 - AI-first ghost brain with Gemini primary AI, Groq backup AI, DeepSeek paid fallback, and local fallback replies only as the final safety net.
@@ -175,7 +175,7 @@ Admin commands:
 - `/ghost-settings` View or change reminders, DMs, public reminders, GIFs, stickers, romantic mode, cute intensity, nickname, and natural chat.
 - `/owner-report` Owner-only Alexa status summary.
 - `/send-ghost-checkin` Owner-only soft check-in request for Alexa.
-- `/set-girlfriend-checkins interval_hours:` Owner/admin sets the no-message check-in interval.
+- `/set-girlfriend-checkins interval_hours:` Owner/admin sets the scheduled check-in interval.
 - `/set-gf-note user note:` Save a safe girlfriend profile note using `key:value`.
 - `/remove-gf-note user key:` Clear a saved girlfriend profile field.
 - `/gf-profile user:` View saved girlfriend profile notes.
@@ -228,7 +228,7 @@ During activation, Ghosty asks Alexa whether general mood summaries and exact pr
 
 ## Alexa Check-Ins
 
-Alexa has a special no-message check-in system. If she has consented, DM mode is on, `girlfriendCheckInsEnabled` is true, quiet hours are inactive, and she has not messaged Ghosty for the configured interval, Ghosty can send a cute DM check-in. Defaults are 2 hours, max 6 per day, quiet hours 23:00-09:00.
+Alexa has a special scheduled check-in system. If she has consented, DM mode is on, `girlfriendCheckInsEnabled` is true, quiet hours are inactive, and the configured interval has passed since the last Ghost check-in, Ghosty can send a cute DM check-in. Defaults are every 2 hours, max 8 per day, quiet hours 23:00-09:00.
 
 If Alexa says "stop", "don't remind me", "leave me alone", or similar, girlfriend check-ins are disabled automatically.
 

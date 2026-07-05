@@ -7,6 +7,9 @@ const logger = require("../utils/logger");
 
 const CHECK_IN_TEXT = "Hii hii~ Alex's little ghost is checking on you.\nHow are you feeling today? Happy, tired, sad, stressed, sleepy, or just okay?";
 const GIRLFRIEND_CHECK_INS = [
+  "Boo. Hello, how's everything?",
+  "I'm hungry. Eat something for me?",
+  "I'm thirsty. Drink some water for me?",
   "Booo! Did I scare you or did I arrive too cutely?",
   "Hey Alexa~ I got bored floating alone. How are you doing?",
   "Hii hii~ your tiny ghost missed your messages. Are you okay?",
@@ -64,6 +67,10 @@ function randomGirlfriendCheckIn() {
   return GIRLFRIEND_CHECK_INS[Math.floor(Math.random() * GIRLFRIEND_CHECK_INS.length)];
 }
 
+function getLastGirlfriendScheduleAnchor(profile) {
+  return profile.lastGirlfriendCheckInAt || profile.lastCheckInSentAt || profile.lastInteractionAt;
+}
+
 async function sendCheckIn(client, profile, settings) {
   if (!profile.consent || !profile.active || !profile.remindersEnabled || !settings.remindersEnabled) return;
   if (!olderThan(profile.lastInteractionAt, settings.reminderHours)) return;
@@ -92,7 +99,7 @@ async function sendGirlfriendCheckIn(client, profile, { force = false, ignoreQui
   if (!config.girlfriendUserId || profile.userId !== config.girlfriendUserId) return { sent: false, reason: "not_girlfriend" };
   if (!profile.consent || !profile.active || !profile.dmModeEnabled) return { sent: false, reason: "no_consent_or_dm" };
   if (!profile.girlfriendCheckInsEnabled) return { sent: false, reason: "disabled" };
-  if (!force && !olderThan(profile.lastInteractionAt, profile.checkInIntervalHours || 2)) return { sent: false, reason: "too_recent" };
+  if (!force && !olderThan(getLastGirlfriendScheduleAnchor(profile), profile.checkInIntervalHours || 2)) return { sent: false, reason: "too_recent" };
   if (!ignoreQuietHours && isQuietHoursActive(profile)) return { sent: false, reason: "quiet_hours" };
 
   resetDailyCheckInCountIfNeeded(profile);
@@ -123,7 +130,17 @@ function startCheckInService(client) {
         const settings = await GuildSettings.findOne({ guildId: profile.guildId });
         if (!settings) continue;
         if (config.girlfriendUserId && profile.userId === config.girlfriendUserId) {
-          await sendGirlfriendCheckIn(client, profile);
+          const result = await sendGirlfriendCheckIn(client, profile);
+          if (result.sent) {
+            logger.info("Girlfriend check-in sent", { intervalHours: profile.checkInIntervalHours || 2 });
+          } else if (!["too_recent", "quiet_hours"].includes(result.reason)) {
+            logger.warn("Girlfriend check-in skipped", {
+              reason: result.reason,
+              consent: profile.consent,
+              dmModeEnabled: profile.dmModeEnabled,
+              enabled: profile.girlfriendCheckInsEnabled
+            });
+          }
         } else {
           await sendCheckIn(client, profile, settings);
         }
@@ -141,6 +158,7 @@ module.exports = {
   sendGirlfriendCheckIn,
   shouldDisableCheckIns,
   isQuietHoursActive,
+  getLastGirlfriendScheduleAnchor,
   CHECK_IN_TEXT,
   GIRLFRIEND_CHECK_INS
 };

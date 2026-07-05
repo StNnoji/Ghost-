@@ -6,7 +6,7 @@ const { safeReply } = require("../utils/safeSend");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("set-girlfriend-checkins")
-    .setDescription("Set Alexa's no-message check-in interval.")
+    .setDescription("Set Alexa's scheduled check-in interval.")
     .addNumberOption((option) => option.setName("interval_hours").setDescription("Hours between check-ins. Default is 2.").setMinValue(1).setMaxValue(24).setRequired(true)),
   async execute(interaction) {
     if (!canOwnerOrManageGhost(interaction)) return safeReply(interaction, { content: "Owner/admin only.", ephemeral: true });
