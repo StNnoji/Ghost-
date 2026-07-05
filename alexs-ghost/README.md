@@ -2,7 +2,7 @@
 
 Alex's Ghost is a cute, wholesome Discord companion made by Alex for his girlfriend. In normal chat he speaks as a tiny ghost called Alex's Ghost or Ghosty, while setup/help/privacy text is transparent that this is an AI-powered Discord companion.
 
-He supports activation for one selected user, consent before chatting/check-ins, cute natural replies, mood detection, food memory, wholesome romantic roleplay, slash commands, MongoDB persistence, optional AI replies, and local fallback replies when AI is not configured.
+He supports activation for one selected user, consent before chatting/check-ins, cute natural replies, mood detection, food memory, wholesome romantic roleplay, slash commands, MongoDB persistence, AI-first replies, and local fallback replies only when AI cannot answer.
 
 ## Features
 
@@ -13,7 +13,7 @@ He supports activation for one selected user, consent before chatting/check-ins,
 - 24-hour soft check-ins, scanned every 30 minutes.
 - Mood detection for happy, sad, angry, tired, sleepy, stressed, lonely, sick, hungry, eating, romantic, teasing, compliment, food, confused, excited, and neutral messages.
 - Food-loving memory system with affection points, favorite foods, and bond levels.
-- Local-first ghost brain with Gemini primary AI, Groq backup AI, DeepSeek paid fallback, and local fallback replies.
+- AI-first ghost brain with Gemini primary AI, Groq backup AI, DeepSeek paid fallback, and local fallback replies only as the final safety net.
 - Brain modules for personality, Alex's rules, lore, local intents, topic tracking, compact memory, girlfriend preferences, and response packs.
 - Privacy tools for viewing, clearing, and limiting what Ghosty remembers.
 - Local fallback replies for every mood category.
@@ -66,8 +66,6 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 AI_TIMEOUT_MS=8000
 MAX_AI_OUTPUT_TOKENS=100
 MAX_MEMORY_EXCHANGES=5
-AI_USER_COOLDOWN_MS=12000
-AI_DAILY_SOFT_LIMIT=80
 AI_DAILY_REQUEST_LIMIT=120
 
 LOCAL_BACKUP_ENABLED=true
@@ -287,11 +285,10 @@ Local response data lives in `data/`. The response pack loader expands curated s
 
 ## AI Providers
 
-Alex's Ghost does local intent detection first, so simple greetings, good morning/night, kisses, hugs, touching/poking, teasing, compliments, food, food received, simple tired/sad replies, 24-hour check-ins, lonely/bored moods, romantic messages, and obvious check-in replies use local templates without spending AI requests.
+Alex's Ghost uses AI first for normal conversation. Local templates are the final fallback only when all configured AI providers fail, no AI keys are configured, the hard daily AI limit is exhausted, or a safety/utility path must answer without AI.
 
-AI is used for messages longer than simple local intent, questions, complex emotional messages, unclear natural conversation tied to recent memory, short answers that need the last Ghost question, or when local replies would become repetitive. Provider order:
+Provider order:
 
-- Local ghost brain first
 - `AI_PRIMARY_PROVIDER=gemini`
 - `GEMINI_API_KEY=`
 - `GEMINI_MODEL=gemini-2.5-flash`
@@ -305,15 +302,20 @@ AI is used for messages longer than simple local intent, questions, complex emot
 - `MAX_AI_OUTPUT_TOKENS=100`
 - `MAX_MEMORY_EXCHANGES=5`
 
-If Gemini fails, rate-limits, times out, or returns an empty response, Ghosty tries Groq, then DeepSeek. If all AI providers fail or no keys are configured, he uses local cute fallback replies and keeps working.
+If Gemini fails, rate-limits, times out, or returns an empty response, Ghosty tries Groq, then DeepSeek. If the user complains about the last answer, Ghosty tracks that complaint in memory for the running process and escalates to the next provider instead of repeating the same source. If all AI providers fail or no keys are configured, he uses local cute fallback replies and keeps working.
+
+The console logs the reply source for every normal reply path:
+
+- `Replied with Gemini`
+- `Replied with Groq`
+- `Replied with DeepSeek`
+- `Replied with local data`
 
 Rate protection:
 
-- `AI_USER_COOLDOWN_MS=12000`
-- `AI_DAILY_SOFT_LIMIT=80`
 - `AI_DAILY_REQUEST_LIMIT=120`
 
-When the soft daily limit is reached, shorter non-question messages switch back to local replies. When the daily request limit is reached, all normal chat uses local replies until the next day.
+When the hard daily request limit is reached, normal chat uses local fallback replies until the next day.
 
 ## GIFs, Stickers, And Emojis
 

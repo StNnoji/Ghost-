@@ -6,6 +6,8 @@ const logger = require("../utils/logger");
 const COMMON_REPLY_CACHE_LIMIT = 80;
 const aiReplyCache = new Map();
 const userAiUsage = new Map();
+const userAnswerComplaints = new Map();
+const lastReplySourceByUser = new Map();
 const dailyAiUsage = {
   day: getDayKey(),
   count: 0
@@ -59,13 +61,22 @@ function getCachedReply(messageContent, detectedMood) {
   return cached;
 }
 
-function setCachedReply(messageContent, detectedMood, reply, source) {
+function setCachedReply(messageContent, detectedMood, reply, sourceMeta) {
   const key = getCacheKey(messageContent, detectedMood);
   if (!key || !reply) return;
-  aiReplyCache.set(key, { reply, source });
+  const meta = typeof sourceMeta === "string" ? { source: sourceMeta } : sourceMeta || {};
+  aiReplyCache.set(key, { reply, ...meta });
   while (aiReplyCache.size > COMMON_REPLY_CACHE_LIMIT) {
     aiReplyCache.delete(aiReplyCache.keys().next().value);
   }
+}
+
+function rememberReplySource(userId, source) {
+  if (!userId || !source) return;
+  lastReplySourceByUser.set(userId, {
+    ...source,
+    at: Date.now()
+  });
 }
 
 function getProviderDisplayName(provider = "") {
@@ -104,40 +115,6 @@ function detectLocalIntent(messageContent = "", detectedMood = "neutral", option
   return null;
 }
 
-function isSimpleLocalMessage(messageContent = "", detectedMood = "neutral", options = {}) {
-  const trimmed = messageContent.trim().toLowerCase();
-  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
-  if (!trimmed) return true;
-  if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u.test(trimmed)) return true;
-  const intent = detectLocalIntent(trimmed, detectedMood, options);
-  if (intent === "short_answer_to_last_question") {
-    return /\b(food|eat|eating|bite|hungry|dinner|lunch|breakfast|snack)\b/i.test(options.lastQuestionAskedByGhost || "");
-  }
-  if (wordCount <= 2 && intent && intent !== "question") return true;
-  if (["food_received", "eating", "compliment", "happy", "hungry"].includes(detectedMood) && wordCount <= 10) return true;
-  if (["sad", "tired", "angry", "lonely", "sleepy"].includes(detectedMood) && wordCount <= 5) return true;
-  if (detectedMood === "romantic" && wordCount <= 9 && /\b(kiss|hug|cuddle|forehead kiss|love you)\b/i.test(trimmed)) return true;
-  if (detectedMood === "teasing" && wordCount <= 9 && /\b(tease|poke|touch|make you blush|boop)\b/i.test(trimmed)) return true;
-  if (intent && wordCount <= 8 && !trimmed.includes("?")) return true;
-  return false;
-}
-
-function isRepeatedByLocalArrays(recentBotReplies = []) {
-  const recent = recentBotReplies.slice(-3).map((reply) => String(reply || "").slice(0, 45));
-  return recent.length >= 3 && new Set(recent).size <= 1;
-}
-
-function isAiCoolingDown(userId) {
-  if (!userId) return false;
-  const usage = userAiUsage.get(userId);
-  return usage?.lastAt && Date.now() - usage.lastAt < config.aiUserCooldownMs;
-}
-
-function isAiBudgetLow() {
-  resetDailyUsageIfNeeded();
-  return dailyAiUsage.count >= config.aiDailySoftLimit;
-}
-
 function isAiBudgetExhausted() {
   resetDailyUsageIfNeeded();
   return dailyAiUsage.count >= config.aiDailyRequestLimit;
@@ -151,24 +128,15 @@ function recordAiRequest(userId) {
   userAiUsage.set(userId, { count: usage.count + 1, lastAt: Date.now() });
 }
 
+function hasConfiguredAiProvider() {
+  return config.aiProviders.some((providerConfig) => Boolean(providerConfig.apiKey));
+}
+
 function shouldUseAI(messageContent = "", detectedMood = "neutral", options = {}) {
   const trimmed = messageContent.trim();
-  const intent = detectLocalIntent(trimmed, detectedMood, options);
+  if (!trimmed) return false;
   if (isAiBudgetExhausted()) return false;
-  if (shouldForceAI(trimmed, intent)) return true;
-  if (isSimpleLocalMessage(trimmed, detectedMood, options)) return false;
-  if (isAiBudgetLow() && trimmed.length < 120 && !trimmed.includes("?")) return false;
-  if (isAiCoolingDown(options.userId) && trimmed.length < 120 && !isRepeatedByLocalArrays(options.recentBotReplies)) return false;
-  if (intent === "short_answer_to_last_question") return true;
-  if (intent === "unknown" && options.lastTopic) return true;
-  if (/\b(you have to|you should|you need to|can you|could you|teach|learn|practice|cook|make|prepare|bake|boil|fry)\b/i.test(trimmed)) return true;
-  if (trimmed.length > 30 && !["greeting", "good_morning", "good_night", "kiss", "hug", "touch", "tease", "compliment", "food", "food_received"].includes(intent)) return true;
-  if (trimmed.includes("?")) return true;
-  if (["sad", "stressed", "lonely", "sick", "angry", "confused"].includes(detectedMood) && trimmed.length > 45) return true;
-  if (detectedMood === "neutral" && trimmed.split(/\s+/).filter(Boolean).length > 8) return true;
-  if (["romantic", "teasing"].includes(detectedMood) && trimmed.length > 60) return true;
-  if (isRepeatedByLocalArrays(options.recentBotReplies)) return true;
-  return false;
+  return hasConfiguredAiProvider();
 }
 
 function shouldForceAI(messageContent = "", intent = null) {
@@ -177,6 +145,60 @@ function shouldForceAI(messageContent = "", intent = null) {
   if (intent === "question" && /\b(personality|about me|about my|remember about me|what do you know about me)\b/i.test(trimmed)) return true;
   return /\b(tell me|explain|describe|summari[sz]e|analy[sz]e|what do you think|give me advice|help me understand)\b/i.test(trimmed)
     || /\b(my personality|about my personality|about me|who am i|what am i like|what do you know about me|what do you remember about me)\b/i.test(trimmed);
+}
+
+function isComplexRequest(messageContent = "", intent = null) {
+  const trimmed = String(messageContent || "").trim();
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+  return wordCount >= 24
+    || shouldForceAI(trimmed, intent)
+    || /\b(complex|deep|detailed|careful|serious|important|hard|confusing|compare|plan|strategy|debug|fix|code|error|why|because|explain|analy[sz]e)\b/i.test(trimmed);
+}
+
+function isAnswerComplaint(messageContent = "") {
+  return /\b(not working|doesn't work|doesnt work|did not work|wrong|bad answer|bad reply|bad response|not good|you didn't answer|you didnt answer|answer me|why are you|stop repeating|same answer|use ai|ai is not working|not using ai|local data|local reply|fix your|fix his|complain|i don't like|i dont like|useless|dumb|stupid|makes no sense)\b/i.test(String(messageContent || ""));
+}
+
+function recordAnswerComplaint(userId, messageContent = "") {
+  const complained = isAnswerComplaint(messageContent);
+  if (!userId || !complained) {
+    return { complained, count: 0, lastAt: null };
+  }
+
+  const previous = userAnswerComplaints.get(userId);
+  const now = Date.now();
+  const recentCount = previous && now - previous.lastAt < 30 * 60 * 1000 ? previous.count : 0;
+  const next = { count: recentCount + 1, lastAt: now };
+  userAnswerComplaints.set(userId, next);
+  return { complained, count: next.count, lastAt: next.lastAt };
+}
+
+function getProviderPlan({ userId, userMessage, intent }) {
+  const complaint = recordAnswerComplaint(userId, userMessage);
+  const complexRequest = isComplexRequest(userMessage, intent);
+  const orderedProviders = [...config.aiProviders];
+  const lastSource = userId ? lastReplySourceByUser.get(userId) : null;
+  let providers = orderedProviders;
+  let reason = complexRequest ? "complex request" : "standard AI-first";
+
+  if (complaint.complained) {
+    reason = "answer complaint escalation";
+    const lastProviderIndex = orderedProviders.findIndex((providerConfig) => providerConfig.provider === lastSource?.provider);
+    if (lastProviderIndex >= 0 && lastProviderIndex < orderedProviders.length - 1) {
+      providers = orderedProviders.slice(lastProviderIndex + 1);
+    } else if (complaint.count >= 2) {
+      providers = orderedProviders.filter((providerConfig) => providerConfig.provider === "deepseek");
+    }
+    if (!providers.length) providers = orderedProviders;
+  }
+
+  return {
+    providers,
+    reason,
+    complexRequest,
+    complaint,
+    lastSource
+  };
 }
 
 function isRateLimitError(error) {
@@ -434,10 +456,6 @@ async function callProvider(provider, payload) {
   throw new Error(`Unsupported AI provider: ${provider}`);
 }
 
-function shouldTryBackup(error) {
-  return Boolean(error?.emptyResponse) || isRateLimitError(error) || isTimeoutError(error) || /api key is not configured|unsupported ai provider/i.test(String(error?.message || ""));
-}
-
 function getAiErrorMeta(providerConfig, error) {
   return {
     slot: providerConfig.slot,
@@ -490,12 +508,14 @@ async function generateGhostReply({
   const intent = detectLocalIntent(userMessage, detectedMood, { lastQuestionAskedByGhost });
   const context = { userMessage, food, intent, lastTopic, lastQuestionAskedByGhost };
   if (!shouldUseAI(userMessage, detectedMood, { userId, recentBotReplies, lastTopic, lastQuestionAskedByGhost })) {
-    return localGhostReply(detectedMood, { ...context, reason: "AI routing chose local reply" });
+    rememberReplySource(userId, { source: "local data", provider: "local" });
+    return localGhostReply(detectedMood, { ...context, reason: hasConfiguredAiProvider() ? "AI daily budget exhausted" : "no AI provider is configured" });
   }
 
   const cached = getCachedReply(userMessage, detectedMood);
   if (cached) {
     logger.info(`Replied with ${cached.source || "AI cache"}`, { cached: true });
+    rememberReplySource(userId, { source: cached.source || "AI cache", provider: cached.provider || "cache", model: cached.model });
     return cached.reply;
   }
 
@@ -515,8 +535,18 @@ async function generateGhostReply({
   });
   const usefulRecentUserMessages = recentUserMessages.filter((message) => message !== userMessage).slice(-5);
   const usefulRecentBotReplies = recentBotReplies.slice(-5);
+  const providerPlan = getProviderPlan({ userId, userMessage, intent });
 
-  for (const providerConfig of config.aiProviders) {
+  logger.info("AI provider plan selected", {
+    reason: providerPlan.reason,
+    complexRequest: providerPlan.complexRequest,
+    answerComplaint: providerPlan.complaint.complained,
+    complaintCount: providerPlan.complaint.count,
+    previousSource: providerPlan.lastSource?.source || null,
+    providers: providerPlan.providers.map((providerConfig) => providerConfig.provider)
+  });
+
+  for (const providerConfig of providerPlan.providers) {
     if (!providerConfig.apiKey) {
       logger.error("AI provider unavailable because API key is not configured", {
         slot: providerConfig.slot,
@@ -538,9 +568,18 @@ async function generateGhostReply({
       if (reply) {
         const cleanReply = sanitizeRomance(limitReplyWords(reply));
         const source = getProviderDisplayName(providerConfig.provider);
-        setCachedReply(userMessage, detectedMood, cleanReply, source);
+        setCachedReply(userMessage, detectedMood, cleanReply, {
+          source,
+          provider: providerConfig.provider,
+          model: providerConfig.model
+        });
         recordAiRequest(userId);
-        logProviderReply(providerConfig);
+        rememberReplySource(userId, { source, provider: providerConfig.provider, model: providerConfig.model });
+        logProviderReply(providerConfig, {
+          reason: providerPlan.reason,
+          complexRequest: providerPlan.complexRequest,
+          answerComplaint: providerPlan.complaint.complained
+        });
         return cleanReply;
       }
       const error = new Error(`${providerConfig.provider} returned an empty response`);
@@ -552,13 +591,14 @@ async function generateGhostReply({
   }
 
   logger.error("All configured AI providers failed; using local fallback reply", {
-    configuredProviders: config.aiProviders.map((providerConfig) => ({
+    attemptedProviders: providerPlan.providers.map((providerConfig) => ({
       slot: providerConfig.slot,
       provider: providerConfig.provider,
       model: providerConfig.model,
       hasApiKey: Boolean(providerConfig.apiKey)
     }))
   });
+  rememberReplySource(userId, { source: "local data", provider: "local" });
   return localGhostReply(detectedMood, { ...context, reason: "all AI providers failed" });
 }
 
@@ -571,6 +611,9 @@ module.exports = {
   localGhostReply,
   shouldUseAI,
   shouldForceAI,
+  isAnswerComplaint,
+  isComplexRequest,
+  getProviderPlan,
   detectLocalIntent,
   isRateLimitError,
   isTimeoutError,

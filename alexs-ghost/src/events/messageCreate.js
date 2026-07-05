@@ -67,7 +67,7 @@ module.exports = {
         await message.channel.sendTyping().catch(() => null);
         if (isStatusQuestion) {
           const text = await buildOwnerDmReply(cleaned);
-          logger.info("Replied with local data", { reason: "owner status report", intent });
+          logger.info("Replied with owner status report", { intent });
           const sentMessage = await message.channel.send(text);
           await saveDmGhostHistory(message, sentMessage, text, { guildId: null, detectedMood, intent });
           return;
