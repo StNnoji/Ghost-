@@ -10,7 +10,7 @@ He supports activation for one selected user, consent before chatting/check-ins,
 - MongoDB + Mongoose profiles and guild settings.
 - Consent-first activation flow with buttons.
 - Optional private DM mode for the activated user.
-- Scheduled girlfriend check-ins, defaulting to every 2 hours and scanned every 30 minutes.
+- Scheduled owner and girlfriend DM check-ins, defaulting to every 2 hours and scanned every 5 minutes.
 - Mood detection for happy, sad, angry, tired, sleepy, stressed, lonely, sick, hungry, eating, romantic, teasing, compliment, food, confused, excited, and neutral messages.
 - Food-loving memory system with affection points, favorite foods, and bond levels.
 - AI-first ghost brain with Gemini primary AI, Groq backup AI, DeepSeek paid fallback, and local fallback replies only as the final safety net.
@@ -77,6 +77,8 @@ DELETE_SERVER_HISTORY_AFTER_SYNC=true
 KEEP_RECENT_MEMORY_EXCHANGES=5
 LOCAL_MONGODB_URI=
 LOCAL_BACKUP_BATCH_SIZE=100
+SCHEDULED_DM_DAILY_CAP=12
+SCHEDULED_DM_IGNORE_QUIET_HOURS=true
 
 GIPHY_API_KEY=
 
@@ -228,7 +230,7 @@ During activation, Ghosty asks Alexa whether general mood summaries and exact pr
 
 ## Alexa Check-Ins
 
-Alexa has a special scheduled check-in system. If she has consented, DM mode is on, `girlfriendCheckInsEnabled` is true, quiet hours are inactive, and the configured interval has passed since the last Ghost check-in, Ghosty can send a cute DM check-in. Defaults are every 2 hours, max 8 per day, quiet hours 23:00-09:00.
+Alex and Alexa have a special scheduled DM check-in system. If consent is on, DM mode is on, and the configured interval has passed since the last Ghost check-in, Ghosty can send a cute DM check-in. Defaults are every 2 hours, max 12 per day, scanned every 5 minutes. Set `SCHEDULED_DM_IGNORE_QUIET_HOURS=false` if you want configured owner/Alexa DMs to respect quiet hours.
 
 If Alexa says "stop", "don't remind me", "leave me alone", or similar, girlfriend check-ins are disabled automatically.
 

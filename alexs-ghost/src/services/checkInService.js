@@ -21,6 +21,10 @@ const GIRLFRIEND_CHECK_INS = [
   "I'm floating here like a tiny cloud. Come say hi when you can.",
   "Water reminder from your thirsty ghost. Please drink a little for me?"
 ];
+const SCHEDULED_DM_SCAN_CRON = "*/5 * * * *";
+const SCHEDULED_DM_SCAN_DESCRIPTION = "every 5 minutes";
+const SCHEDULED_DM_DAILY_CAP = Number(process.env.SCHEDULED_DM_DAILY_CAP || 12);
+const SCHEDULED_DM_IGNORE_QUIET_HOURS = String(process.env.SCHEDULED_DM_IGNORE_QUIET_HOURS || "true").toLowerCase() !== "false";
 
 function olderThan(date, hours) {
   if (!date) return true;
@@ -69,6 +73,30 @@ function randomGirlfriendCheckIn() {
 
 function getLastGirlfriendScheduleAnchor(profile) {
   return profile.lastGirlfriendCheckInAt || profile.lastCheckInSentAt || profile.lastInteractionAt;
+}
+
+function getLastScheduledDmAnchor(profile) {
+  return profile.lastCheckInSentAt;
+}
+
+function getScheduledDmTarget(profile) {
+  if (config.ownerUserId && profile.userId === config.ownerUserId) {
+    return {
+      key: "owner",
+      displayName: config.ownerDisplayName || "CG Gamer",
+      requiresGirlfriendFlag: false
+    };
+  }
+
+  if (config.girlfriendUserId && profile.userId === config.girlfriendUserId) {
+    return {
+      key: "girlfriend",
+      displayName: config.girlfriendDisplayName || "Helicopter Girl",
+      requiresGirlfriendFlag: true
+    };
+  }
+
+  return null;
 }
 
 async function sendCheckIn(client, profile, settings) {
@@ -122,43 +150,83 @@ async function sendGirlfriendCheckIn(client, profile, { force = false, ignoreQui
   return { sent: Boolean(sent), reason: sent ? "sent" : "dm_failed" };
 }
 
+async function sendScheduledDmCheckIn(client, profile, { force = false, ignoreQuietHours = SCHEDULED_DM_IGNORE_QUIET_HOURS } = {}) {
+  const target = getScheduledDmTarget(profile);
+  if (!target) return { sent: false, reason: "not_configured_target" };
+  if (!profile.consent || !profile.active || !profile.dmModeEnabled) return { sent: false, reason: "no_consent_or_dm", target };
+  if (target.requiresGirlfriendFlag && !profile.girlfriendCheckInsEnabled) return { sent: false, reason: "disabled", target };
+  if (!force && !olderThan(getLastScheduledDmAnchor(profile), profile.checkInIntervalHours || 2)) return { sent: false, reason: "too_recent", target };
+  if (!ignoreQuietHours && isQuietHoursActive(profile)) return { sent: false, reason: "quiet_hours", target };
+
+  resetDailyCheckInCountIfNeeded(profile);
+  const dailyCap = Math.max(profile.maxDailyCheckIns || 0, SCHEDULED_DM_DAILY_CAP);
+  if (!force && profile.dailyCheckInCount >= dailyCap) return { sent: false, reason: "daily_limit", target };
+
+  const user = await client.users.fetch(profile.userId).catch(() => null);
+  if (!user) return { sent: false, reason: "user_fetch_failed", target };
+  const sent = await safeSend(user, randomGirlfriendCheckIn());
+  profile.dmChannelAvailable = Boolean(sent);
+  profile.lastDmFailedAt = sent ? null : new Date();
+
+  if (sent) {
+    const now = new Date();
+    profile.lastCheckInSentAt = now;
+    if (target.key === "girlfriend") {
+      profile.lastGirlfriendCheckInAt = now;
+      profile.pendingOwnerCheckInRequestedAt = null;
+    }
+    profile.dailyCheckInCount += 1;
+  }
+
+  await profile.save();
+  return { sent: Boolean(sent), reason: sent ? "sent" : "dm_failed", target };
+}
+
 function startCheckInService(client) {
-  cron.schedule("*/30 * * * *", async () => {
+  cron.schedule(SCHEDULED_DM_SCAN_CRON, async () => {
     try {
       const profiles = await UserGhostProfile.find({ active: true, consent: true, remindersEnabled: true });
       for (const profile of profiles) {
-        const settings = await GuildSettings.findOne({ guildId: profile.guildId });
-        if (!settings) continue;
-        if (config.girlfriendUserId && profile.userId === config.girlfriendUserId) {
-          const result = await sendGirlfriendCheckIn(client, profile);
+        const scheduledTarget = getScheduledDmTarget(profile);
+        if (scheduledTarget) {
+          const result = await sendScheduledDmCheckIn(client, profile);
           if (result.sent) {
-            logger.info("Girlfriend check-in sent", { intervalHours: profile.checkInIntervalHours || 2 });
+            logger.info("Scheduled DM check-in sent", {
+              target: scheduledTarget.key,
+              intervalHours: profile.checkInIntervalHours || 2
+            });
           } else if (!["too_recent", "quiet_hours"].includes(result.reason)) {
-            logger.warn("Girlfriend check-in skipped", {
+            logger.warn("Scheduled DM check-in skipped", {
+              target: scheduledTarget.key,
               reason: result.reason,
               consent: profile.consent,
               dmModeEnabled: profile.dmModeEnabled,
-              enabled: profile.girlfriendCheckInsEnabled
+              enabled: scheduledTarget.requiresGirlfriendFlag ? profile.girlfriendCheckInsEnabled : true
             });
           }
-        } else {
-          await sendCheckIn(client, profile, settings);
+          continue;
         }
+
+        const settings = await GuildSettings.findOne({ guildId: profile.guildId });
+        if (!settings) continue;
+        await sendCheckIn(client, profile, settings);
       }
     } catch (error) {
       logger.error("Check-in service failed", error);
     }
   });
-  logger.info("Check-in service scheduled every 30 minutes");
+  logger.info(`Check-in service scheduled ${SCHEDULED_DM_SCAN_DESCRIPTION}`);
 }
 
 module.exports = {
   startCheckInService,
   sendCheckIn,
   sendGirlfriendCheckIn,
+  sendScheduledDmCheckIn,
   shouldDisableCheckIns,
   isQuietHoursActive,
   getLastGirlfriendScheduleAnchor,
+  getLastScheduledDmAnchor,
   CHECK_IN_TEXT,
   GIRLFRIEND_CHECK_INS
 };
