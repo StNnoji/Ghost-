@@ -1,5 +1,10 @@
 require("dotenv").config();
 
+function getDeepSeekThinkingMode() {
+  const mode = String(process.env.DEEPSEEK_THINKING_MODE || "disabled").toLowerCase();
+  return mode === "enabled" ? "enabled" : "disabled";
+}
+
 const config = {
   discordToken: process.env.DISCORD_TOKEN,
   clientId: process.env.CLIENT_ID,
@@ -16,7 +21,7 @@ const config = {
       slot: "primary",
       provider: "deepseek",
       apiKey: process.env.DEEPSEEK_API_KEY || process.env.AI_PRIMARY_API_KEY || process.env.AI_API_KEY,
-      model: process.env.DEEPSEEK_MODEL || process.env.AI_PRIMARY_MODEL || process.env.AI_MODEL || "deepseek-chat"
+      model: process.env.DEEPSEEK_MODEL || process.env.AI_PRIMARY_MODEL || process.env.AI_MODEL || "deepseek-v4-flash"
     },
     {
       slot: "backup",
@@ -33,6 +38,7 @@ const config = {
   ],
   aiTimeoutMs: Number(process.env.AI_TIMEOUT_MS || 8000),
   maxAiOutputTokens: Number(process.env.MAX_AI_OUTPUT_TOKENS || 100),
+  deepseekThinkingMode: getDeepSeekThinkingMode(),
   maxMemoryExchanges: Number(process.env.MAX_MEMORY_EXCHANGES || 10),
   aiDailyRequestLimit: Number(process.env.AI_DAILY_REQUEST_LIMIT || 120),
   localBackupEnabled: String(process.env.LOCAL_BACKUP_ENABLED || "false").toLowerCase() === "true",

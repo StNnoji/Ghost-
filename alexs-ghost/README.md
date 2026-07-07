@@ -53,7 +53,8 @@ GIRLFRIEND_NICKNAME=Alexa
 
 AI_PRIMARY_PROVIDER=deepseek
 DEEPSEEK_API_KEY=
-DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_THINKING_MODE=disabled
 
 AI_BACKUP_PROVIDER=groq
 GROQ_API_KEY=
@@ -305,7 +306,8 @@ Provider order:
 
 - `AI_PRIMARY_PROVIDER=deepseek`
 - `DEEPSEEK_API_KEY=`
-- `DEEPSEEK_MODEL=deepseek-chat`
+- `DEEPSEEK_MODEL=deepseek-v4-flash`
+- `DEEPSEEK_THINKING_MODE=disabled`
 - `AI_BACKUP_PROVIDER=groq`
 - `GROQ_API_KEY=`
 - `GROQ_MODEL=llama-3.3-70b-versatile`
@@ -316,7 +318,7 @@ Provider order:
 - `MAX_AI_OUTPUT_TOKENS=100`
 - `MAX_MEMORY_EXCHANGES=10`
 
-If DeepSeek fails, rate-limits, times out, returns an empty response, or gives a dead short reply, Ghosty tries Groq, then Gemini. Provider errors are logged internally and never mentioned in Discord replies. If all AI providers fail, he sends a soft ghost-brain fallback and keeps working.
+If DeepSeek fails, rate-limits, times out, returns an empty response, or gives a dead short reply, Ghosty tries Groq, then Gemini. For DeepSeek V4, Ghosty sends `thinking: { "type": "disabled" }` by default so normal chat gets a final answer instead of spending the small reply budget on reasoning. Provider errors are logged internally and never mentioned in Discord replies. If all AI providers fail, he sends a soft ghost-brain fallback and keeps working.
 
 AI chat replies are not cached. Each normal chat reply asks the selected provider again so a bad answer is not reused.
 

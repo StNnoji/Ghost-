@@ -432,17 +432,23 @@ async function callOpenAiCompatibleMessages({ provider, messages, apiKey, model 
     headers["HTTP-Referer"] = "https://discord.com";
     headers["X-Title"] = "Alexs Ghost";
   }
+  const body = {
+    model,
+    messages,
+    max_tokens: config.maxAiOutputTokens,
+    temperature: 0.9,
+    frequency_penalty: 0.6,
+    presence_penalty: 0.5
+  };
+
+  if (provider === "deepseek") {
+    body.thinking = { type: config.deepseekThinkingMode };
+  }
+
   const data = await fetchJsonWithTimeout(getOpenAiCompatibleUrl(provider), {
     method: "POST",
     headers,
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: config.maxAiOutputTokens,
-      temperature: 0.9,
-      frequency_penalty: 0.6,
-      presence_penalty: 0.5
-    })
+    body: JSON.stringify(body)
   });
   return data.choices?.[0]?.message?.content?.trim();
 }
