@@ -28,6 +28,22 @@ function getContextualLocalReply(messageContent = "") {
     ]);
   }
 
+  if (/\b(what are you doing|wyd|what u doing|what r u doing)\b/.test(text)) {
+    return randomItem([
+      "I am floating around this chat, keeping an eye on you and waiting for your next little update.",
+      "Right now I am here with you, doing tiny ghost duty and listening properly.",
+      "I was just hovering nearby, wondering how your day is treating you."
+    ]);
+  }
+
+  if (/\b(how are you|how r u|how are u|you okay|are you okay)\b/.test(text)) {
+    return randomItem([
+      "I am okay, soft and present. More importantly, how are you feeling right now?",
+      "I am doing my tiny ghost best, staying close and ready to listen.",
+      "I am here and alright. Tell me how your side of the screen feels today."
+    ]);
+  }
+
   if (/\b(i'?m fine|im fine|i am fine|okay|ok|alright|better now|not good|not okay)\b/.test(text) && text.split(/\s+/).length <= 6) {
     return randomItem([
       "Thank you for telling me. I am staying close and keeping the moment soft.",

@@ -14,19 +14,19 @@ const config = {
   aiProviders: [
     {
       slot: "primary",
-      provider: (process.env.AI_PRIMARY_PROVIDER || process.env.AI_PROVIDER || "grok").toLowerCase(),
-      apiKey: process.env.GROK_API_KEY || process.env.XAI_API_KEY || process.env.AI_PRIMARY_API_KEY || process.env.AI_API_KEY,
-      model: process.env.GROK_MODEL || process.env.XAI_MODEL || process.env.AI_PRIMARY_MODEL || process.env.AI_MODEL || "grok-4.3"
+      provider: "deepseek",
+      apiKey: process.env.DEEPSEEK_API_KEY || process.env.AI_PRIMARY_API_KEY || process.env.AI_API_KEY,
+      model: process.env.DEEPSEEK_MODEL || process.env.AI_PRIMARY_MODEL || process.env.AI_MODEL || "deepseek-chat"
     },
     {
       slot: "backup",
-      provider: (process.env.AI_BACKUP_PROVIDER || "deepseek").toLowerCase(),
-      apiKey: process.env.DEEPSEEK_API_KEY || process.env.AI_BACKUP_API_KEY,
-      model: process.env.DEEPSEEK_MODEL || process.env.AI_BACKUP_MODEL || "deepseek-chat"
+      provider: "groq",
+      apiKey: process.env.GROQ_API_KEY || process.env.AI_BACKUP_API_KEY,
+      model: process.env.GROQ_MODEL || process.env.AI_BACKUP_MODEL || "llama-3.3-70b-versatile"
     },
     {
       slot: "final_fallback",
-      provider: (process.env.AI_FINAL_PROVIDER || "gemini").toLowerCase(),
+      provider: "gemini",
       apiKey: process.env.GEMINI_API_KEY || process.env.AI_FINAL_API_KEY,
       model: process.env.GEMINI_MODEL || process.env.AI_FINAL_MODEL || "gemini-2.5-flash"
     }

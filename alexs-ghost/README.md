@@ -13,7 +13,7 @@ He supports activation for one selected user, consent before chatting/check-ins,
 - Scheduled owner and girlfriend DM check-ins, defaulting to every 2 hours and scanned every 5 minutes.
 - Mood detection for happy, sad, angry, tired, sleepy, stressed, lonely, sick, hungry, eating, romantic, teasing, compliment, food, confused, excited, and neutral messages.
 - Food-loving memory system with affection points, favorite foods, and bond levels.
-- AI-first ghost brain with Grok primary AI, DeepSeek backup AI, Gemini final fallback, and local fallback replies for safety/no-key paths.
+- AI-first ghost brain with DeepSeek primary AI, Groq backup AI, Gemini final fallback, and local fallback replies for safety/no-key paths.
 - Brain modules for personality, Alex's rules, lore, local intents, topic tracking, compact memory, girlfriend preferences, and response packs.
 - Privacy tools for viewing, clearing, and limiting what Ghosty remembers.
 - Local fallback replies for every mood category.
@@ -51,13 +51,13 @@ GIRLFRIEND_USER_ID=
 GIRLFRIEND_DISPLAY_NAME=Helicopter Girl
 GIRLFRIEND_NICKNAME=Alexa
 
-AI_PRIMARY_PROVIDER=grok
-GROK_API_KEY=
-GROK_MODEL=grok-4.3
-
-AI_BACKUP_PROVIDER=deepseek
+AI_PRIMARY_PROVIDER=deepseek
 DEEPSEEK_API_KEY=
 DEEPSEEK_MODEL=deepseek-chat
+
+AI_BACKUP_PROVIDER=groq
+GROQ_API_KEY=
+GROQ_MODEL=llama-3.3-70b-versatile
 
 AI_FINAL_PROVIDER=gemini
 GEMINI_API_KEY=
@@ -303,12 +303,12 @@ Alex's Ghost uses AI first for normal conversation. If all configured AI provide
 
 Provider order:
 
-- `AI_PRIMARY_PROVIDER=grok`
-- `GROK_API_KEY=`
-- `GROK_MODEL=grok-4.3`
-- `AI_BACKUP_PROVIDER=deepseek`
+- `AI_PRIMARY_PROVIDER=deepseek`
 - `DEEPSEEK_API_KEY=`
 - `DEEPSEEK_MODEL=deepseek-chat`
+- `AI_BACKUP_PROVIDER=groq`
+- `GROQ_API_KEY=`
+- `GROQ_MODEL=llama-3.3-70b-versatile`
 - `AI_FINAL_PROVIDER=gemini`
 - `GEMINI_API_KEY=`
 - `GEMINI_MODEL=gemini-2.5-flash`
@@ -316,15 +316,15 @@ Provider order:
 - `MAX_AI_OUTPUT_TOKENS=100`
 - `MAX_MEMORY_EXCHANGES=10`
 
-If Grok fails, rate-limits, times out, or returns an empty response, Ghosty tries DeepSeek, then Gemini. Provider errors are logged internally and never mentioned in Discord replies. If all AI providers fail, he sends a soft ghost-brain fallback and keeps working.
+If DeepSeek fails, rate-limits, times out, returns an empty response, or gives a dead short reply, Ghosty tries Groq, then Gemini. Provider errors are logged internally and never mentioned in Discord replies. If all AI providers fail, he sends a soft ghost-brain fallback and keeps working.
 
 AI chat replies are not cached. Each normal chat reply asks the selected provider again so a bad answer is not reused.
 
 The console logs the reply source for every normal reply path:
 
-- `Replied with Gemini`
-- `Replied with Grok`
 - `Replied with DeepSeek`
+- `Replied with Groq`
+- `Replied with Gemini`
 - `Replied with local data`
 
 Rate protection:
@@ -362,7 +362,7 @@ Use a Node.js host that supports long-running processes and environment variable
 
 - `DISCORD_TOKEN`
 - `MONGODB_URI`
-- `GROK_API_KEY`
+- `GROQ_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `GEMINI_API_KEY`
 - `GIPHY_API_KEY`

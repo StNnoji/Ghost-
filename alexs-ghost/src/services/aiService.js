@@ -19,6 +19,8 @@ const dailyAiUsage = {
 const simpleIntentPatterns = [
   ["good_morning", /\b(good morning|morning)\b/i],
   ["good_night", /\b(good night|goodnight|night night|sleep well)\b/i],
+  ["how_are_you", /\b(how are you|how r u|how are u|you okay|are you okay)\b/i],
+  ["what_are_you_doing", /\b(what are you doing|wyd|what u doing|what r u doing)\b/i],
   ["greeting", /\b(hi|hii+|hello|hey|heyy+|yo|salam|assalam)\b/i],
   ["kiss", /\b(kiss|kisses|smooch|mwah)\b/i],
   ["hug", /\b(hug|cuddle|hold my hand|forehead kiss)\b/i],
@@ -87,11 +89,11 @@ function logLocalDataReply(reason, meta = {}) {
 function detectLocalIntent(messageContent = "", detectedMood = "neutral", options = {}) {
   const trimmed = messageContent.trim().toLowerCase();
   if (!trimmed) return "confused";
-  if (trimmed.includes("?")) return "question";
   if (options.lastQuestionAskedByGhost && shortAnswerPattern.test(trimmed)) return "short_answer_to_last_question";
   for (const [intent, pattern] of simpleIntentPatterns) {
     if (pattern.test(trimmed)) return intent;
   }
+  if (trimmed.includes("?")) return "question";
   if (detectedMood && detectedMood !== "neutral") return detectedMood;
   return null;
 }
@@ -475,6 +477,7 @@ function getAiErrorMeta(providerConfig, error) {
     rateLimited: isRateLimitError(error),
     timedOut: isTimeoutError(error),
     emptyResponse: Boolean(error?.emptyResponse),
+    lowQualityResponse: Boolean(error?.lowQualityResponse),
     reason: error?.message || String(error)
   };
 }
@@ -483,6 +486,24 @@ function limitReplyWords(reply = "", maxWords = 80) {
   const words = String(reply).trim().split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return words.join(" ");
   return `${words.slice(0, maxWords).join(" ")}...`;
+}
+
+function getCurrentUserMessage(messages = []) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") return String(messages[index].content || "");
+  }
+  return "";
+}
+
+function isLowQualityAiReply(reply = "", userMessage = "") {
+  const clean = String(reply || "").replace(/\s+/g, " ").trim();
+  if (!clean) return true;
+  if (/^(oh+|okay|ok|hmm+|uh+|um+|i hear you|i understand|sure|yes|no|fine)[,.\s!?]*$/i.test(clean)) return true;
+  if (/\b(i (?:didn'?t|do not|don't|dont) understand|i'?m confused|can you (?:say|repeat|rephrase)|what did you mean|one more clue|tiny rephrase)\b/i.test(clean)) return true;
+
+  const userAskedQuestion = /[?]|\b(what|why|how|when|where|who|which|can you|could you|do you|are you|is it)\b/i.test(userMessage);
+  const wordCount = clean.split(/\s+/).filter(Boolean).length;
+  return userAskedQuestion && wordCount <= 3;
 }
 
 function localGhostReply(detectedMood, context = {}) {
@@ -494,6 +515,8 @@ function localGhostReply(detectedMood, context = {}) {
 }
 
 async function generateWithFallback(messages, { providerPlan = { providers: config.aiProviders }, userId, logMeta = {} } = {}) {
+  const currentUserMessage = getCurrentUserMessage(messages);
+
   for (const providerConfig of providerPlan.providers) {
     if (!providerConfig.apiKey) {
       logger.error("AI provider unavailable because API key is not configured", {
@@ -514,6 +537,11 @@ async function generateWithFallback(messages, { providerPlan = { providers: conf
       if (!reply) {
         const error = new Error(`${providerConfig.provider} returned an empty response`);
         error.emptyResponse = true;
+        throw error;
+      }
+      if (isLowQualityAiReply(reply, currentUserMessage)) {
+        const error = new Error(`${providerConfig.provider} returned a low-quality reply`);
+        error.lowQualityResponse = true;
         throw error;
       }
 

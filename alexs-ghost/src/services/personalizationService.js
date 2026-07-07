@@ -3,7 +3,7 @@ const SAFE_REPLY_LIMIT = 1850;
 const MAX_SAVED_PREFERENCES = 12;
 const { PRIVATE_SETUP_FALLBACK_REPLY, sentenceRevealsPrivateSetup } = require("./privacyGuardService");
 
-const roboticReplyPattern = /^(oh+|okay|ok|hmm+|i understand|sure|yes|no|fine)[.!?]*$/i;
+const roboticReplyPattern = /^(oh+|okay|ok|hmm+|i understand|sure|yes|no|fine)[,.\s!?]*$/i;
 const sensitivePattern = /\b(password|passcode|address|home address|secret|token|api key|private key|credit card)\b/i;
 const leakSentencePattern = /\b(as an ai|ai language model|system prompt|developer message|provider|api key|api|logs?|model|gemini|deepseek|grok|groq|openrouter|cerebras|xai|codex|database|db flag|memory flag|reminder configuration|private setup)\b/i;
 
