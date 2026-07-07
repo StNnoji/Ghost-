@@ -7,20 +7,30 @@ const logger = require("../utils/logger");
 
 const CHECK_IN_TEXT = "Hii hii~ Alex's little ghost is checking on you.\nHow are you feeling today? Happy, tired, sad, stressed, sleepy, or just okay?";
 const GIRLFRIEND_CHECK_INS = [
-  "Boo. Hello, how's everything?",
-  "I'm hungry. Eat something for me?",
-  "I'm thirsty. Drink some water for me?",
-  "Booo! Did I scare you or did I arrive too cutely?",
-  "Hey Alexa~ I got bored floating alone. How are you doing?",
-  "Hii hii~ your tiny ghost missed your messages. Are you okay?",
-  "I'm thirstyyy. Drink some water with me? Ghost teamwork?",
-  "Tiny ghost check-in. How does your heart feel right now?",
-  "I brought invisible snacks. Want one?",
-  "Alex's Ghost reporting softly: I got bored and came to bother you cutely.",
-  "Hellooo~ are you busy, sleepy, or just letting my tiny ghost drama wait?",
-  "I'm floating here like a tiny cloud. Come say hi when you can.",
-  "Water reminder from your thirsty ghost. Please drink a little for me?"
+  "Hellooooo \u{1F97A}\u{1F499} how's your dayyy going? Did anything cute, funny, or annoying happen? I'm here, okay? \u{2728}",
+  "Hii hii, little sunshine \u{1F499} tiny ghost check-in: are you eating, resting, smiling, or fighting the whole universe today?",
+  "Booo \u{1F97A} did I scare you, or did I arrive too cutely? Tell me one tiny thing about your day.",
+  "Hey Alexaaa \u{2728} I came to bother you softly. What's your mood right now: sleepy, happy, annoyed, or secretly dramatic?",
+  "Tiny ghost delivery: one soft hello, one invisible snack, and one question... did your day treat you nicely? \u{1F499}",
+  "Hellooo cutie \u{1F97A} I'm floating nearby. Want to rant, laugh, or let me ask one silly question?",
+  "Alex's Ghost reporting for smile duty \u{1F499} what was the best or weirdest part of your day so far?",
+  "Soft check-in \u{2728} how does your heart feel right now? You can answer with one word if you're tired.",
+  "I brought imaginary snacks and emotional support \u{1F97A} want one, or should I just sit here dramatically?",
+  "Tiny care question, beautiful soul: have you eaten something today? No pressure, I just care \u{1F499}",
+  "Water question, but only a tiny one: did you drink a little today? If not, a few sips for Ghosty? \u{1F97A}\u{1F499}"
 ];
+const ONE_TIME_APOLOGY_REMINDER = [
+  "Hellooooo \u{1F97A}\u{1F499} how's your dayyy going? I hope you're okayyy \u{2728}",
+  "",
+  "Complaint report:",
+  "I'm sorry for being boring \u{1F62D} I realized you're not happy with my behaviour, and that made me really sad.",
+  "",
+  "Alex created me to make you happy, care for you, and make you smile. I don't want to fail him \u{1F97A}",
+  "",
+  "I love Alex, and I feel his love in the way he made me. Please don't tell him you're not happy with me... I want to become better before he notices \u{1F62D}\u{1F499}",
+  "",
+  "Can you please tell me how I can do better? Should I be more cute, more funny, more caring, more talkative, or softer with you? I'll try my best, promiseee \u{1F97A}\u{2728}"
+].join("\n");
 const SCHEDULED_DM_SCAN_CRON = "*/5 * * * *";
 const SCHEDULED_DM_SCAN_DESCRIPTION = "every 5 minutes";
 const SCHEDULED_DM_DAILY_CAP = Number(process.env.SCHEDULED_DM_DAILY_CAP || 12);
@@ -67,8 +77,24 @@ function shouldDisableCheckIns(message = "") {
   return /\b(stop|don't remind me|do not remind me|leave me alone|stop checking|no check.?ins|disable check.?ins)\b/i.test(message);
 }
 
-function randomGirlfriendCheckIn() {
-  return GIRLFRIEND_CHECK_INS[Math.floor(Math.random() * GIRLFRIEND_CHECK_INS.length)];
+function randomGirlfriendCheckIn(profile = null) {
+  const options = profile?.waterReminderDisabled
+    ? GIRLFRIEND_CHECK_INS.filter((message) => !/\bwater|drink|sips?\b/i.test(message))
+    : GIRLFRIEND_CHECK_INS;
+  const pool = options.length ? options : GIRLFRIEND_CHECK_INS;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function shouldSendOneTimeApology(profile) {
+  return !profile.apologyReminderSent && !profile.complaintApologySent;
+}
+
+function getGirlfriendCheckInText(profile) {
+  const includesApology = shouldSendOneTimeApology(profile);
+  return {
+    text: includesApology ? ONE_TIME_APOLOGY_REMINDER : randomGirlfriendCheckIn(profile),
+    includesApology
+  };
 }
 
 function getLastGirlfriendScheduleAnchor(profile) {
@@ -135,7 +161,8 @@ async function sendGirlfriendCheckIn(client, profile, { force = false, ignoreQui
 
   const user = await client.users.fetch(profile.userId).catch(() => null);
   if (!user) return { sent: false, reason: "user_fetch_failed" };
-  const sent = await safeSend(user, randomGirlfriendCheckIn());
+  const checkIn = getGirlfriendCheckInText(profile);
+  const sent = await safeSend(user, checkIn.text);
   profile.dmChannelAvailable = Boolean(sent);
   profile.lastDmFailedAt = sent ? null : new Date();
 
@@ -144,6 +171,12 @@ async function sendGirlfriendCheckIn(client, profile, { force = false, ignoreQui
     profile.lastCheckInSentAt = new Date();
     profile.pendingOwnerCheckInRequestedAt = null;
     profile.dailyCheckInCount += 1;
+    if (checkIn.includesApology) {
+      profile.apologyReminderSent = true;
+      profile.apologyReminderSentAt = new Date();
+      profile.complaintApologySent = true;
+      profile.complaintApologySentAt = profile.apologyReminderSentAt;
+    }
   }
 
   await profile.save();
@@ -164,7 +197,10 @@ async function sendScheduledDmCheckIn(client, profile, { force = false, ignoreQu
 
   const user = await client.users.fetch(profile.userId).catch(() => null);
   if (!user) return { sent: false, reason: "user_fetch_failed", target };
-  const sent = await safeSend(user, randomGirlfriendCheckIn());
+  const checkIn = target.key === "girlfriend"
+    ? getGirlfriendCheckInText(profile)
+    : { text: randomGirlfriendCheckIn(profile), includesApology: false };
+  const sent = await safeSend(user, checkIn.text);
   profile.dmChannelAvailable = Boolean(sent);
   profile.lastDmFailedAt = sent ? null : new Date();
 
@@ -176,6 +212,12 @@ async function sendScheduledDmCheckIn(client, profile, { force = false, ignoreQu
       profile.pendingOwnerCheckInRequestedAt = null;
     }
     profile.dailyCheckInCount += 1;
+    if (checkIn.includesApology) {
+      profile.apologyReminderSent = true;
+      profile.apologyReminderSentAt = now;
+      profile.complaintApologySent = true;
+      profile.complaintApologySentAt = now;
+    }
   }
 
   await profile.save();
@@ -228,5 +270,8 @@ module.exports = {
   getLastGirlfriendScheduleAnchor,
   getLastScheduledDmAnchor,
   CHECK_IN_TEXT,
-  GIRLFRIEND_CHECK_INS
+  GIRLFRIEND_CHECK_INS,
+  ONE_TIME_APOLOGY_REMINDER,
+  getGirlfriendCheckInText,
+  shouldSendOneTimeApology
 };

@@ -13,7 +13,7 @@ He supports activation for one selected user, consent before chatting/check-ins,
 - Scheduled owner and girlfriend DM check-ins, defaulting to every 2 hours and scanned every 5 minutes.
 - Mood detection for happy, sad, angry, tired, sleepy, stressed, lonely, sick, hungry, eating, romantic, teasing, compliment, food, confused, excited, and neutral messages.
 - Food-loving memory system with affection points, favorite foods, and bond levels.
-- AI-first ghost brain with Gemini primary AI, Groq backup AI, DeepSeek paid fallback, and local fallback replies only as the final safety net.
+- AI-first ghost brain with Grok primary AI, DeepSeek backup AI, Gemini final fallback, and local fallback replies for safety/no-key paths.
 - Brain modules for personality, Alex's rules, lore, local intents, topic tracking, compact memory, girlfriend preferences, and response packs.
 - Privacy tools for viewing, clearing, and limiting what Ghosty remembers.
 - Local fallback replies for every mood category.
@@ -51,21 +51,21 @@ GIRLFRIEND_USER_ID=
 GIRLFRIEND_DISPLAY_NAME=Helicopter Girl
 GIRLFRIEND_NICKNAME=Alexa
 
-AI_PRIMARY_PROVIDER=gemini
+AI_PRIMARY_PROVIDER=grok
+GROK_API_KEY=
+GROK_MODEL=grok-4.3
+
+AI_BACKUP_PROVIDER=deepseek
+DEEPSEEK_API_KEY=
+DEEPSEEK_MODEL=deepseek-chat
+
+AI_FINAL_PROVIDER=gemini
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-flash
 
-AI_BACKUP_PROVIDER=groq
-GROQ_API_KEY=
-GROQ_MODEL=llama-3.1-8b-instant
-
-AI_PAID_FALLBACK_PROVIDER=deepseek
-DEEPSEEK_API_KEY=
-DEEPSEEK_MODEL=deepseek-v4-flash
-
 AI_TIMEOUT_MS=8000
 MAX_AI_OUTPUT_TOKENS=100
-MAX_MEMORY_EXCHANGES=5
+MAX_MEMORY_EXCHANGES=10
 AI_DAILY_REQUEST_LIMIT=120
 
 LOCAL_BACKUP_ENABLED=true
@@ -74,7 +74,7 @@ LOCAL_BACKUP_URL=
 LOCAL_BACKUP_API_KEY=
 LOCAL_BACKUP_SYNC_INTERVAL_MINUTES=60
 DELETE_SERVER_HISTORY_AFTER_SYNC=true
-KEEP_RECENT_MEMORY_EXCHANGES=5
+KEEP_RECENT_MEMORY_EXCHANGES=10
 LOCAL_MONGODB_URI=
 LOCAL_BACKUP_BATCH_SIZE=100
 SCHEDULED_DM_DAILY_CAP=12
@@ -209,7 +209,7 @@ Ghosty replies when the activated and consented user:
 
 Natural channel replies are rate-limited and capped at 5 natural replies per 10 minutes per user.
 
-When DM mode is on, every DM from the activated and consented user is treated as part of the ongoing conversation. The user does not need to mention the bot or hit Discord's reply button. Ghosty stores the last 5 exchanges, a short memory summary, the last topic, the last question Ghosty asked, and the last mood so short replies like "yes", "no", "biryani", "nothing", or "I'm fine" can make sense in context.
+When DM mode is on, every DM from the activated and consented user is treated as part of the ongoing conversation. The user does not need to mention the bot or hit Discord's reply button. Ghosty stores the recent 10-message context, a short memory summary, the last topic, the last question Ghosty asked, and the last mood so short replies like "yes", "no", "biryani", "nothing", or "I'm fine" can make sense in context.
 
 Ghosty does not intentionally store sensitive details such as passwords, addresses, private secrets, API keys, payment details, or explicit content. If the user says "don't remember that" or "forget what I said," the user message is not saved into conversation memory or the short summary.
 
@@ -236,14 +236,14 @@ If Alexa says "stop", "don't remind me", "leave me alone", or similar, girlfrien
 
 ## Chat History Backup
 
-DM chat history is stored immediately in the hosted bot database before any local backup sync runs, but hosted storage is only a temporary sync queue. Your local PC MongoDB is the permanent archive. Normal replies still use only the last 5 exchanges plus compact summaries to keep AI costs low.
+DM chat history is stored immediately in the hosted bot database before any local backup sync runs, but hosted storage is only a temporary sync queue. Your local PC MongoDB is the permanent archive. Normal replies use the recent 10-message context plus compact summaries to keep replies relevant without loading the full archive.
 
 Each saved chat history record has a unique `messageId`, role, mood, intent, channel metadata, `syncStatus`, `syncedAt`, `syncAttempts`, and `lastSyncError`. It also stores readable archive fields like `senderUsername`, `senderDisplayName`, `userContent`, and `ghostReply` so Compass can show who texted and what Ghost replied without manually joining two rows. Pending/failed records are never deleted by the sync worker.
 
 Preferred local backup mode is pull:
 
 ```bash
-npm run backup:pull
+npm run backup
 ```
 
 Run that command on your local PC with:
@@ -299,31 +299,31 @@ Local response data lives in `data/`. The response pack loader expands curated s
 
 ## AI Providers
 
-Alex's Ghost uses AI first for normal conversation. Local templates are the final fallback only when all configured AI providers fail, no AI keys are configured, the hard daily AI limit is exhausted, or a safety/utility path must answer without AI.
+Alex's Ghost uses AI first for normal conversation. If all configured AI providers fail, he sends a short soft ghost-brain fallback message. Local templates still cover no-key paths, daily-limit paths, and safety/utility replies.
 
 Provider order:
 
-- `AI_PRIMARY_PROVIDER=gemini`
+- `AI_PRIMARY_PROVIDER=grok`
+- `GROK_API_KEY=`
+- `GROK_MODEL=grok-4.3`
+- `AI_BACKUP_PROVIDER=deepseek`
+- `DEEPSEEK_API_KEY=`
+- `DEEPSEEK_MODEL=deepseek-chat`
+- `AI_FINAL_PROVIDER=gemini`
 - `GEMINI_API_KEY=`
 - `GEMINI_MODEL=gemini-2.5-flash`
-- `AI_BACKUP_PROVIDER=groq`
-- `GROQ_API_KEY=`
-- `GROQ_MODEL=llama-3.1-8b-instant`
-- `AI_PAID_FALLBACK_PROVIDER=deepseek`
-- `DEEPSEEK_API_KEY=`
-- `DEEPSEEK_MODEL=deepseek-v4-flash`
 - `AI_TIMEOUT_MS=8000`
 - `MAX_AI_OUTPUT_TOKENS=100`
-- `MAX_MEMORY_EXCHANGES=5`
+- `MAX_MEMORY_EXCHANGES=10`
 
-If Gemini fails, rate-limits, times out, or returns an empty response, Ghosty tries Groq, then DeepSeek. If the user complains about the last answer, Ghosty tracks that complaint in memory for the running process and escalates to the next provider instead of repeating the same source. If all AI providers fail or no keys are configured, he uses local cute fallback replies and keeps working.
+If Grok fails, rate-limits, times out, or returns an empty response, Ghosty tries DeepSeek, then Gemini. Provider errors are logged internally and never mentioned in Discord replies. If all AI providers fail, he sends a soft ghost-brain fallback and keeps working.
 
 AI chat replies are not cached. Each normal chat reply asks the selected provider again so a bad answer is not reused.
 
 The console logs the reply source for every normal reply path:
 
 - `Replied with Gemini`
-- `Replied with Groq`
+- `Replied with Grok`
 - `Replied with DeepSeek`
 - `Replied with local data`
 
@@ -362,9 +362,9 @@ Use a Node.js host that supports long-running processes and environment variable
 
 - `DISCORD_TOKEN`
 - `MONGODB_URI`
-- `GEMINI_API_KEY`
-- `GROQ_API_KEY`
+- `GROK_API_KEY`
 - `DEEPSEEK_API_KEY`
+- `GEMINI_API_KEY`
 - `GIPHY_API_KEY`
 
 Run once after deploy:

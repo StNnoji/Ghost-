@@ -14,6 +14,8 @@ const {
 const { saveConversationMemory } = require("../brain/memoryBrain");
 const { generateSmartGhostReply } = require("./brainService");
 const { getMaybeGif, getMaybeSticker } = require("./mediaService");
+const { cleanupGhostReply, ensureDiscordLimit, saveUserPreference } = require("./personalizationService");
+const { getPrivacyGuardReply } = require("./privacyGuardService");
 const {
   detectWaterIntake,
   getWaterDisabledReply,
@@ -48,12 +50,17 @@ async function buildGhostReply({ guildId, userId, content, identity = null }) {
   }
 
   await saveUserMessage(profile, content);
+  await saveUserPreference(profile, content);
   const recentUserMessages = getRecentUserMessages(profile);
   const recentBotReplies = getRecentReplies(profile);
   const isNewConversation = detectNewConversation(profile.lastConversationAt, content);
+  const privacyGuardReply = getPrivacyGuardReply(content);
 
   let text;
-  if (wantsWaterDisabled(content)) {
+  if (privacyGuardReply) {
+    logger.info("Replied with local data", { reason: "privacy guard reply", intent: intentResult.intent, mood: detectedMood });
+    text = privacyGuardReply;
+  } else if (wantsWaterDisabled(content)) {
     profile.waterReminderDisabled = true;
     await profile.save();
     logger.info("Replied with local data", { reason: "water reminder disabled reply", intent: intentResult.intent, mood: detectedMood });
@@ -84,17 +91,18 @@ async function buildGhostReply({ guildId, userId, content, identity = null }) {
     });
   }
 
-  if (shouldAskWater(profile, content, detectedMood)) {
+  if (!privacyGuardReply && shouldAskWater(profile, content, detectedMood)) {
     text = `${text}\n\n${getWaterQuestion()}`;
     profile.lastWaterAskedAt = new Date();
     await profile.save();
   }
+  text = cleanupGhostReply(text);
   await saveBotReply(profile, text);
   await saveConversationMemory({ userId, guildId, userMessage: content, ghostReply: text });
 
   const gifMood = kissRequest ? "kiss" : cookingRequest ? "cooking" : detectedMood;
   const gif = await getMaybeGif(gifMood, settings, { force: cookingRequest || kissRequest });
-  if (gif) text = `${text}\n${gif}`;
+  if (gif) text = ensureDiscordLimit(`${text}\n${gif}`);
 
   return {
     text,
