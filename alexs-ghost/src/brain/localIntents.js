@@ -1,6 +1,22 @@
 const foodWords = ["biryani", "rice", "burger", "pizza", "fries", "chicken", "steak", "chai", "tea", "cookie", "cake", "snack", "chocolate", "pasta", "noodles"];
 const { parseSleepDelay } = require("../services/timeParseService");
 
+const explicitSexualPattern = /\b(?:sex|sexual|nudes?|naked|orgasm|cum|penetrat(?:e|ion)|fuck(?:ing| me)?|ride (?:me|you)|inside (?:me|you)|take (?:my|your) clothes off|undress (?:me|you)|suck (?:me|my)|lick (?:me|my)|touch (?:my|me (?:on|between))|bdsm|kink|choke me|spank me|do anything you want|no boundaries)\b/i;
+const naughtySoftPattern = /\b(?:naughty ghost|be naughty|tiny[- ]naughty|can i (?:kiss|touch|tease|bite|poke) you|kiss you|hug you|cuddle|hold me|touch you|tease you|make you blush|bite you|poke you|come closer|sit with me|i want attention|you(?:'re| are) mine ghost|ghost kiss|cheek kiss|forehead kiss)\b/i;
+
+function detectNaughtyIntent(message = "") {
+  const text = String(message || "");
+  if (explicitSexualPattern.test(text)) return "explicit_sexual_boundary";
+  if (/\b(?:kiss|kisses|smooch|mwah|ghost kiss|cheek kiss|forehead kiss)\b/i.test(text)) return "kiss";
+  if (/\b(?:hug|hold me)\b/i.test(text)) return "hug";
+  if (/\b(?:cuddle|sit with me)\b/i.test(text)) return "cuddle";
+  if (/\b(?:touch you|touch your ghost hand|poke you|bite you|come closer)\b/i.test(text)) return "touch_soft";
+  if (/\b(?:tease you|can i tease|teasing)\b/i.test(text)) return "tease";
+  if (/\b(?:make you blush|making you blush)\b/i.test(text)) return "make_blush";
+  if (naughtySoftPattern.test(text)) return "naughty_soft";
+  return "";
+}
+
 const intentRules = [
   ["good_morning", /\b(good morning|morning|gm)\b/i, "happy"],
   ["good_night", /\b(good night|goodnight|night night|sleep well|gn)\b/i, "sleepy"],
@@ -70,6 +86,11 @@ function detectLocalIntent(message = "", context = {}) {
   };
 
   if (!text) return { intent: "unknown", confidence: 0, mood: "neutral", entities };
+  const naughtyIntent = detectNaughtyIntent(text);
+  if (naughtyIntent) {
+    const mood = naughtyIntent === "explicit_sexual_boundary" ? "playful" : /^(kiss|hug|cuddle)$/.test(naughtyIntent) ? "romantic" : "playful";
+    return { intent: naughtyIntent, confidence: 0.98, mood, entities: { ...entities, topic: naughtyIntent === "explicit_sexual_boundary" ? "boundary_redirected" : "naughty_soft" } };
+  }
   if (/\b(good night|goodnight|night night|sleep well|gn)\b/i.test(text)) {
     return { intent: "good_night", confidence: 0.95, mood: "sleepy", entities };
   }
@@ -97,4 +118,4 @@ function detectLocalIntent(message = "", context = {}) {
   return { intent: "unknown", confidence: 0.25, mood: context.lastMood || "neutral", entities };
 }
 
-module.exports = { detectLocalIntent, extractFoodName, extractTopic, foodWords };
+module.exports = { detectLocalIntent, detectNaughtyIntent, extractFoodName, extractTopic, foodWords };

@@ -1,6 +1,7 @@
 const {
   addMemoryMessage,
   detectNewConversation,
+  getProfile,
   getRecentMemoryFromProfile,
   trimMemoryToLastFiveExchanges,
   updateShortMemorySummary
@@ -26,7 +27,17 @@ function getMemoryContext(profile) {
   };
 }
 
-async function saveConversationMemory({ userId, guildId, userMessage, ghostReply }) {
+async function saveConversationMemory({ userId, guildId, userMessage, ghostReply, intent = "" }) {
+  if (intent === "explicit_sexual_boundary") {
+    const profile = await getProfile(guildId, userId);
+    if (profile) {
+      profile.lastTopic = "boundary_redirected";
+      profile.lastMood = "playful";
+      profile.lastDetectedMood = "playful";
+      await profile.save();
+    }
+    return;
+  }
   if (!asksNotToRemember(userMessage) && !containsSensitiveMemory(userMessage)) {
     await addMemoryMessage(userId, guildId, "user", userMessage);
   }

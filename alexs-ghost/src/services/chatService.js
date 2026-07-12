@@ -28,6 +28,7 @@ const {
 } = require("./waterService");
 const { safeSticker } = require("../utils/safeSend");
 const logger = require("../utils/logger");
+const { getNaughtySoftReply, getSafeStoredContent, isNaughtyIntent, shouldUseLocalNaughtyReply } = require("./naughtySoftService");
 
 async function buildGhostReply({ guildId, userId, content, identity = null }) {
   const settings = await GuildSettings.findOneAndUpdate({ guildId }, { $setOnInsert: { guildId } }, { upsert: true, new: true, setDefaultsOnInsert: true });
@@ -50,7 +51,8 @@ async function buildGhostReply({ guildId, userId, content, identity = null }) {
     await saveMood(profile, detectedMood);
   }
 
-  await saveUserMessage(profile, content);
+  const safeMemoryContent = getSafeStoredContent(content, intentResult.intent);
+  await saveUserMessage(profile, safeMemoryContent);
   await saveUserPreference(profile, content);
   const recentUserMessages = getRecentUserMessages(profile);
   const recentBotReplies = getRecentReplies(profile);
@@ -58,7 +60,14 @@ async function buildGhostReply({ guildId, userId, content, identity = null }) {
   const privacyGuardReply = getPrivacyGuardReply(content);
 
   let text;
-  if (privacyGuardReply) {
+  if (identity?.isGirlfriend && isNaughtyIntent(intentResult.intent) && shouldUseLocalNaughtyReply(content, intentResult.intent)) {
+    logger.info("Replied with local data", { reason: "naughty soft mode", intent: intentResult.intent, mood: detectedMood });
+    text = getNaughtySoftReply(intentResult.intent, recentBotReplies);
+    profile.lastTopic = intentResult.intent === "explicit_sexual_boundary" ? "boundary_redirected" : "naughty_soft";
+    profile.lastMood = intentResult.intent === "explicit_sexual_boundary" ? "playful" : detectedMood;
+    profile.lastDetectedMood = profile.lastMood;
+    await profile.save();
+  } else if (privacyGuardReply) {
     logger.info("Replied with local data", { reason: "privacy guard reply", intent: intentResult.intent, mood: detectedMood });
     text = privacyGuardReply;
   } else if (wantsWaterDisabled(content)) {
@@ -99,7 +108,7 @@ async function buildGhostReply({ guildId, userId, content, identity = null }) {
   }
   text = cleanupGhostReply(text);
   await saveBotReply(profile, text);
-  await saveConversationMemory({ userId, guildId, userMessage: content, ghostReply: text });
+  await saveConversationMemory({ userId, guildId, userMessage: safeMemoryContent, ghostReply: text, intent: intentResult.intent });
 
   const gifMood = kissRequest ? "kiss" : cookingRequest ? "cooking" : detectedMood;
   const gif = await getMaybeGif(gifMood, settings, { force: cookingRequest || kissRequest });

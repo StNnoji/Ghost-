@@ -12,6 +12,7 @@ const { detectMood } = require("../services/moodService");
 const { buildOwnerDmReply, isOwnerStatusQuestion } = require("../services/ownerReportService");
 const { isOnCooldown, countInWindow } = require("../utils/cooldowns");
 const logger = require("../utils/logger");
+const { getSafeStoredContent } = require("../services/naughtySoftService");
 
 async function getDmProfile(userId) {
   return UserGhostProfile.findOne({ userId, active: true, consent: true, dmModeEnabled: true }).sort({ updatedAt: -1 });
@@ -138,7 +139,7 @@ module.exports = {
           if (routineReply.handled) profile.lastInteractionAt = new Date();
         }
         await profile.save();
-        await saveDmUserHistory(message, { guildId, cleaned, detectedMood, intent: intentResult.intent });
+        await saveDmUserHistory(message, { guildId, cleaned: getSafeStoredContent(cleaned, intentResult.intent), detectedMood, intent: intentResult.intent });
         if (routineReply?.handled) {
           const sentMessage = await message.channel.send(routineReply.text);
           await saveDmGhostHistory(message, sentMessage, routineReply.text, {
@@ -170,7 +171,7 @@ module.exports = {
       if (isDm) {
         await saveDmGhostHistory(message, sentMessage, reply.text, {
           guildId,
-          cleaned,
+          cleaned: getSafeStoredContent(cleaned, reply.intent || intentResult.intent),
           detectedMood: reply.detectedMood || detectedMood,
           intent: reply.intent || intentResult.intent
         });

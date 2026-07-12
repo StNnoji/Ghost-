@@ -1,4 +1,5 @@
 const moodKeywords = {
+  playful: ["be naughty", "naughty ghost", "tease you", "make you blush", "poke you", "touch you", "come closer"],
   sad: ["sad", "crying", "cry", "hurt", "broken", "upset", "depressed", "lonely", "bad day", "empty", "pain"],
   tired: ["tired", "exhausted", "drained", "no energy", "weak", "burned out"],
   sleepy: ["sleepy", "sleep", "nap", "drowsy", "zzz"],
@@ -18,6 +19,7 @@ const moodKeywords = {
 
 const priority = [
   "food_received",
+  "playful",
   "romantic",
   "teasing",
   "compliment",

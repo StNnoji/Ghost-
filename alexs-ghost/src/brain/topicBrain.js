@@ -4,6 +4,8 @@ function isTopicReset(message = "") {
 
 function inferTopic(message = "", intentResult = {}) {
   if (isTopicReset(message)) return "";
+  if (intentResult.intent === "explicit_sexual_boundary") return "boundary_redirected";
+  if (["naughty_soft", "kiss", "hug", "cuddle", "touch_soft", "tease", "make_blush"].includes(intentResult.intent)) return "naughty_soft";
   if (intentResult.entities?.topic) return intentResult.entities.topic;
   if (["food", "food_received", "hungry"].includes(intentResult.intent)) return "food";
   if (["kiss", "hug", "tease", "touch", "poke", "love"].includes(intentResult.intent)) return "affection";

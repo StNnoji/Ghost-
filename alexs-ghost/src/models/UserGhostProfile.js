@@ -76,6 +76,15 @@ const userGhostProfileSchema = new mongoose.Schema(
     apologyReminderSentAt: { type: Date, default: null },
     complaintApologySent: { type: Boolean, default: false },
     complaintApologySentAt: { type: Date, default: null },
+    oneTimeCampaignsSent: {
+      type: [
+        {
+          campaignId: { type: String, required: true },
+          sentAt: { type: Date, required: true }
+        }
+      ],
+      default: []
+    },
     girlfriendProfile: {
       preferredName: { type: String, default: "" },
       nicknames: { type: [String], default: [] },

@@ -162,6 +162,7 @@ async function updateShortMemorySummary(userId, guildId, newUserMessage, ghostRe
 module.exports = {
   getGhostBondLevel,
   getProfile,
+  getProfile,
   getOrCreateProfile,
   saveMood,
   addFood,

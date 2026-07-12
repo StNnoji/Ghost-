@@ -41,6 +41,10 @@ function getGeneralMoodText(profile) {
   return "her mood looked okay";
 }
 
+function isPrivateFlirtyTopic(profile) {
+  return ["naughty_soft", "romantic_teasing", "boundary_redirected"].includes(profile?.lastTopic);
+}
+
 function buildOwnerReportText(profile, { includeGreeting = true } = {}) {
   const name = config.girlfriendNickname || config.girlfriendDisplayName || "Alexa";
   if (!profile) return `${includeGreeting ? "Hello sir. " : ""}I do not have an active ${name} profile yet.`;
@@ -50,7 +54,7 @@ function buildOwnerReportText(profile, { includeGreeting = true } = {}) {
   parts.push(`${name} is ${profile.active ? "active" : "not active"} and consent is ${profile.consent ? "yes" : "no"}`);
   parts.push(`last DM was ${formatRelativeTime(profile.lastInteractionAt || profile.lastConversationAt)}`);
   parts.push(`last mood: ${profile.lastDetectedMood || profile.lastMood || "neutral"}`);
-  if (profile.lastTopic) parts.push(`topic: ${profile.lastTopic}`);
+  if (profile.lastTopic && (!isPrivateFlirtyTopic(profile) || profile.allowOwnerExactQuotes || profile.allowOwnerLastMessagePreview)) parts.push(`topic: ${profile.lastTopic}`);
   if (profile.lastGirlfriendCheckInAt || profile.lastCheckInSentAt) {
     parts.push(`last check-in sent ${formatRelativeTime(profile.lastGirlfriendCheckInAt || profile.lastCheckInSentAt)}`);
   }
@@ -70,8 +74,12 @@ function buildOwnerReportText(profile, { includeGreeting = true } = {}) {
 
   let text = `${parts.join(". ")}.`;
   if (profile.allowOwnerMoodSummary) {
-    text += ` Summary: ${getGeneralMoodText(profile)}.`;
-    if (profile.shortMemorySummary) text += ` ${profile.shortMemorySummary.slice(-180)}`;
+    if (isPrivateFlirtyTopic(profile) && !(profile.allowOwnerExactQuotes || profile.allowOwnerLastMessagePreview)) {
+      text += " Sir, Alexa was playful with me earlier. I kept everything cute and respectful.";
+    } else {
+      text += ` Summary: ${getGeneralMoodText(profile)}.`;
+      if (profile.shortMemorySummary) text += ` ${profile.shortMemorySummary.slice(-180)}`;
+    }
   } else {
     text += ` I can only share status basics because ${name}'s mood summaries are private unless she allows them.`;
   }
