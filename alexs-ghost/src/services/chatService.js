@@ -35,7 +35,8 @@ async function buildGhostReply({ guildId, userId, content, identity = null }) {
   const detectedMood = detectMood(content);
   const intentResult = detectLocalIntent(content, {
     lastQuestionAskedByGhost: profile.lastQuestionAskedByGhost,
-    lastMood: profile.lastMood || detectedMood
+    lastMood: profile.lastMood || detectedMood,
+    sleepState: profile.sleepState
   });
   const cookingRequest = isCookingRequest(content.toLowerCase());
   const kissRequest = isKissRequest(content.toLowerCase());

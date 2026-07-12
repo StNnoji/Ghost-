@@ -10,7 +10,8 @@ He supports activation for one selected user, consent before chatting/check-ins,
 - MongoDB + Mongoose profiles and guild settings.
 - Consent-first activation flow with buttons.
 - Optional private DM mode for the activated user.
-- Scheduled owner and girlfriend DM check-ins, defaulting to every 2 hours and scanned every 5 minutes.
+- Scheduled owner and girlfriend DM check-ins, defaulting to every 12 hours and scanned every 5 minutes.
+- Germany-time daily routine for Alexa: good morning, bedtime prompt, sleep follow-ups, and quiet hours that handle daylight saving time.
 - Mood detection for happy, sad, angry, tired, sleepy, stressed, lonely, sick, hungry, eating, romantic, teasing, compliment, food, confused, excited, and neutral messages.
 - Food-loving memory system with affection points, favorite foods, and bond levels.
 - AI-first ghost brain with DeepSeek primary AI, Groq backup AI, Gemini final fallback, and local fallback replies for safety/no-key paths.
@@ -78,8 +79,14 @@ DELETE_SERVER_HISTORY_AFTER_SYNC=true
 KEEP_RECENT_MEMORY_EXCHANGES=10
 LOCAL_MONGODB_URI=
 LOCAL_BACKUP_BATCH_SIZE=100
-SCHEDULED_DM_DAILY_CAP=12
-SCHEDULED_DM_IGNORE_QUIET_HOURS=true
+SCHEDULED_DM_DAILY_CAP=2
+SCHEDULED_DM_IGNORE_QUIET_HOURS=false
+GIRLFRIEND_TIMEZONE=Europe/Berlin
+GOOD_MORNING_TIME=07:00
+BEDTIME_PROMPT_TIME=22:00
+DEFAULT_SLEEP_FOLLOWUP_MINUTES=30
+SLEEP_QUIET_HOURS_START=23:00
+SLEEP_QUIET_HOURS_END=07:00
 
 GIPHY_API_KEY=
 
@@ -163,7 +170,10 @@ User commands:
 - `/allow-owner-summary` / `/deny-owner-summary` Alexa controls general mood summaries.
 - `/allow-owner-quotes` / `/deny-owner-quotes` Alexa controls exact message previews.
 - `/what-did-you-tell-alex` Alexa sees the last owner report.
-- `/enable-girlfriend-checkins` / `/disable-girlfriend-checkins` Alexa or owner/admin controls two-hour check-ins.
+- `/enable-girlfriend-checkins` / `/disable-girlfriend-checkins` Alexa or owner/admin controls once- or twice-daily check-ins.
+- `/routine-settings` View the timezone, schedule, quiet hours, sleep state, and check-in state.
+- `/sleep-now` / `/wake-up` Alexa can explicitly enter sleep mode or resume normal check-ins.
+- `/enable-routine` / `/disable-routine` Alexa or owner/admin controls the daily good-morning and bedtime routine.
 - `/forget-topic` Clear the current conversation topic and short summary.
 - `/forget-me` Delete your stored Ghosty profile/memory for the current context.
 - `/forget-chat-history` Delete your stored full chat history backup queue and recent conversation memory.
@@ -179,6 +189,8 @@ Admin commands:
 - `/owner-report` Owner-only Alexa status summary.
 - `/send-ghost-checkin` Owner-only soft check-in request for Alexa.
 - `/set-girlfriend-checkins interval_hours:` Owner/admin sets the scheduled check-in interval.
+- `/set-timezone timezone:` Owner/admin sets the routine IANA timezone, default `Europe/Berlin`.
+- `/set-goodmorning-time time:` / `/set-bedtime-time time:` Alexa or owner/admin sets the daily schedule.
 - `/set-gf-note user note:` Save a safe girlfriend profile note using `key:value`.
 - `/remove-gf-note user key:` Clear a saved girlfriend profile field.
 - `/gf-profile user:` View saved girlfriend profile notes.
@@ -231,9 +243,15 @@ During activation, Ghosty asks Alexa whether general mood summaries and exact pr
 
 ## Alexa Check-Ins
 
-Alex and Alexa have a special scheduled DM check-in system. If consent is on, DM mode is on, and the configured interval has passed since the last Ghost check-in, Ghosty can send a cute DM check-in. Defaults are every 2 hours, max 12 per day, scanned every 5 minutes. Set `SCHEDULED_DM_IGNORE_QUIET_HOURS=false` if you want configured owner/Alexa DMs to respect quiet hours.
+Alex and Alexa have a special scheduled DM check-in system. If consent is on, DM mode is on, and the configured interval has passed since the last Ghost check-in, Ghosty can send a cute DM check-in. Defaults are every 12 hours with a strict maximum of two per day, scanned every 5 minutes. Use `/set-girlfriend-checkins interval_hours:24` for one per day or `interval_hours:12` for two per day. Alexa's automatic check-ins always pause while she is sleeping or during her routine quiet hours.
 
 If Alexa says "stop", "don't remind me", "leave me alone", or similar, girlfriend check-ins are disabled automatically.
+
+## Alexa Daily Routine
+
+Ghosty evaluates Alexa's schedule every minute in `Europe/Berlin`, so the 07:00 good morning, 22:00 bedtime question, and 23:00-07:00 quiet period follow German daylight saving time. Each routine message is local-first and does not call an AI provider.
+
+After a bedtime question, phrases such as `after 15 mins`, `after fifteen minutes`, `few minutes`, `later`, `after an hour`, and `after 2 hours` schedule one gentle sleep follow-up. Clear sleep messages such as `going to sleep`, `goodnight`, `gn`, or `sleep now` put Ghosty into sleep mode immediately. Ghosty sends at most three requested follow-ups in one night, pauses random check-ins and water prompts while Alexa is sleeping or in quiet hours, and wakes normally at the next good-morning time.
 
 ## Chat History Backup
 

@@ -1,8 +1,11 @@
 const foodWords = ["biryani", "rice", "burger", "pizza", "fries", "chicken", "steak", "chai", "tea", "cookie", "cake", "snack", "chocolate", "pasta", "noodles"];
+const { parseSleepDelay } = require("../services/timeParseService");
 
 const intentRules = [
-  ["good_morning", /\b(good morning|morning)\b/i, "happy"],
-  ["good_night", /\b(good night|goodnight|night night|sleep well)\b/i, "sleepy"],
+  ["good_morning", /\b(good morning|morning|gm)\b/i, "happy"],
+  ["good_night", /\b(good night|goodnight|night night|sleep well|gn)\b/i, "sleepy"],
+  ["wake_up", /\b(i'?m awake|im awake|woke up|wake up)\b/i, "happy"],
+  ["sleep_now", /\b(going to sleep|i'?m going to sleep|i'?m sleeping|im sleeping|sleep now|yes sleep|okay sleep)\b/i, "sleepy"],
   ["how_are_you", /\b(how are you|how r u|how are u|you okay|are you okay)\b/i, "neutral"],
   ["what_are_you_doing", /\b(what are you doing|wyd|what u doing|what r u doing)\b/i, "neutral"],
   ["are_you_real", /\b(are you real|real ghost|are you human|are you ai|are you a bot)\b/i, "neutral"],
@@ -67,6 +70,20 @@ function detectLocalIntent(message = "", context = {}) {
   };
 
   if (!text) return { intent: "unknown", confidence: 0, mood: "neutral", entities };
+  if (/\b(good night|goodnight|night night|sleep well|gn)\b/i.test(text)) {
+    return { intent: "good_night", confidence: 0.95, mood: "sleepy", entities };
+  }
+  const sleepReply = parseSleepDelay(text);
+  const isBareBedtimeAffirmation = /^(yes|yeah|yep|okay|ok)$/i.test(lower);
+  if (context.sleepState === "bedtime_asked" && /^(yes|yeah|yep|no|nope|nah|okay|ok)$/i.test(lower)) {
+    return { intent: "bedtime_question_response", confidence: 0.95, mood: "sleepy", entities };
+  }
+  if (sleepReply.intent === "delay_sleep") {
+    return { intent: "delay_sleep", confidence: 0.95, mood: "sleepy", entities };
+  }
+  if (sleepReply.intent === "sleep_now" && !isBareBedtimeAffirmation) {
+    return { intent: "sleep_now", confidence: 0.95, mood: "sleepy", entities };
+  }
   if (context.lastQuestionAskedByGhost && /^(yes|yeah|yep|no|nope|nah|maybe|nothing|fine|okay|ok|later|idk|i don't know|dont know|biryani|rice|pizza|burger|chai|tea)$/i.test(lower)) {
     return { intent: /^(yes|yeah|yep|no|nope|nah)$/i.test(lower) ? "yes_no_answer" : "short_answer", confidence: 0.9, mood: context.lastMood || "neutral", entities };
   }

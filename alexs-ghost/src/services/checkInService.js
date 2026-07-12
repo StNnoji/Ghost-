@@ -3,6 +3,7 @@ const GuildSettings = require("../models/GuildSettings");
 const UserGhostProfile = require("../models/UserGhostProfile");
 const { config } = require("../config");
 const { safeSend } = require("../utils/safeSend");
+const { isRoutineQuietHoursActive, resetRoutineDailyCheckInCount } = require("./dailyRoutineService");
 const logger = require("../utils/logger");
 
 const CHECK_IN_TEXT = "Hii hii~ Alex's little ghost is checking on you.\nHow are you feeling today? Happy, tired, sad, stressed, sleepy, or just okay?";
@@ -33,8 +34,17 @@ const ONE_TIME_APOLOGY_REMINDER = [
 ].join("\n");
 const SCHEDULED_DM_SCAN_CRON = "*/5 * * * *";
 const SCHEDULED_DM_SCAN_DESCRIPTION = "every 5 minutes";
-const SCHEDULED_DM_DAILY_CAP = Number(process.env.SCHEDULED_DM_DAILY_CAP || 12);
+const MIN_SCHEDULED_DM_INTERVAL_HOURS = 12;
+const MAX_SCHEDULED_DM_INTERVAL_HOURS = 24;
+const MAX_SCHEDULED_DM_DAILY_CAP = 2;
+const SCHEDULED_DM_DAILY_CAP = limitNumber(process.env.SCHEDULED_DM_DAILY_CAP, 1, MAX_SCHEDULED_DM_DAILY_CAP, MAX_SCHEDULED_DM_DAILY_CAP);
 const SCHEDULED_DM_IGNORE_QUIET_HOURS = String(process.env.SCHEDULED_DM_IGNORE_QUIET_HOURS || "true").toLowerCase() !== "false";
+
+function limitNumber(value, minimum, maximum, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(maximum, Math.max(minimum, numeric));
+}
 
 function olderThan(date, hours) {
   if (!date) return true;
@@ -46,31 +56,12 @@ function canSendDaily(lastCheckInSentAt) {
   return olderThan(lastCheckInSentAt, 24);
 }
 
-function getDateKey(date = new Date()) {
-  return date.toISOString().slice(0, 10);
-}
-
-function parseTimeToMinutes(time = "00:00") {
-  const [hours, minutes] = String(time).split(":").map((part) => Number(part));
-  return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0);
-}
-
 function isQuietHoursActive(profile, date = new Date()) {
-  if (!profile.quietHoursEnabled) return false;
-  const nowMinutes = date.getHours() * 60 + date.getMinutes();
-  const start = parseTimeToMinutes(profile.quietHoursStart || "23:00");
-  const end = parseTimeToMinutes(profile.quietHoursEnd || "09:00");
-  if (start === end) return false;
-  if (start < end) return nowMinutes >= start && nowMinutes < end;
-  return nowMinutes >= start || nowMinutes < end;
+  return isRoutineQuietHoursActive(profile, date);
 }
 
 function resetDailyCheckInCountIfNeeded(profile) {
-  const today = getDateKey();
-  if (profile.dailyCheckInDate !== today) {
-    profile.dailyCheckInDate = today;
-    profile.dailyCheckInCount = 0;
-  }
+  resetRoutineDailyCheckInCount(profile);
 }
 
 function shouldDisableCheckIns(message = "") {
@@ -103,6 +94,20 @@ function getLastGirlfriendScheduleAnchor(profile) {
 
 function getLastScheduledDmAnchor(profile) {
   return profile.lastCheckInSentAt;
+}
+
+function getScheduledCheckInIntervalHours(profile) {
+  return limitNumber(
+    profile.checkInIntervalHours,
+    MIN_SCHEDULED_DM_INTERVAL_HOURS,
+    MAX_SCHEDULED_DM_INTERVAL_HOURS,
+    MIN_SCHEDULED_DM_INTERVAL_HOURS
+  );
+}
+
+function getScheduledDailyCap(profile) {
+  const profileCap = limitNumber(profile.maxDailyCheckIns, 1, MAX_SCHEDULED_DM_DAILY_CAP, SCHEDULED_DM_DAILY_CAP);
+  return Math.min(profileCap, SCHEDULED_DM_DAILY_CAP);
 }
 
 function getScheduledDmTarget(profile) {
@@ -153,11 +158,12 @@ async function sendGirlfriendCheckIn(client, profile, { force = false, ignoreQui
   if (!config.girlfriendUserId || profile.userId !== config.girlfriendUserId) return { sent: false, reason: "not_girlfriend" };
   if (!profile.consent || !profile.active || !profile.dmModeEnabled) return { sent: false, reason: "no_consent_or_dm" };
   if (!profile.girlfriendCheckInsEnabled) return { sent: false, reason: "disabled" };
-  if (!force && !olderThan(getLastGirlfriendScheduleAnchor(profile), profile.checkInIntervalHours || 2)) return { sent: false, reason: "too_recent" };
+  if (!force && profile.sleepState === "sleeping") return { sent: false, reason: "sleeping" };
+  if (!force && !olderThan(getLastGirlfriendScheduleAnchor(profile), getScheduledCheckInIntervalHours(profile))) return { sent: false, reason: "too_recent" };
   if (!ignoreQuietHours && isQuietHoursActive(profile)) return { sent: false, reason: "quiet_hours" };
 
   resetDailyCheckInCountIfNeeded(profile);
-  if (!force && profile.dailyCheckInCount >= (profile.maxDailyCheckIns || 6)) return { sent: false, reason: "daily_limit" };
+  if (!force && profile.dailyCheckInCount >= getScheduledDailyCap(profile)) return { sent: false, reason: "daily_limit" };
 
   const user = await client.users.fetch(profile.userId).catch(() => null);
   if (!user) return { sent: false, reason: "user_fetch_failed" };
@@ -188,11 +194,12 @@ async function sendScheduledDmCheckIn(client, profile, { force = false, ignoreQu
   if (!target) return { sent: false, reason: "not_configured_target" };
   if (!profile.consent || !profile.active || !profile.dmModeEnabled) return { sent: false, reason: "no_consent_or_dm", target };
   if (target.requiresGirlfriendFlag && !profile.girlfriendCheckInsEnabled) return { sent: false, reason: "disabled", target };
-  if (!force && !olderThan(getLastScheduledDmAnchor(profile), profile.checkInIntervalHours || 2)) return { sent: false, reason: "too_recent", target };
-  if (!ignoreQuietHours && isQuietHoursActive(profile)) return { sent: false, reason: "quiet_hours", target };
+  if (!force && target.key === "girlfriend" && profile.sleepState === "sleeping") return { sent: false, reason: "sleeping", target };
+  if (!force && !olderThan(getLastScheduledDmAnchor(profile), getScheduledCheckInIntervalHours(profile))) return { sent: false, reason: "too_recent", target };
+  if ((target.key === "girlfriend" || !ignoreQuietHours) && isQuietHoursActive(profile)) return { sent: false, reason: "quiet_hours", target };
 
   resetDailyCheckInCountIfNeeded(profile);
-  const dailyCap = Math.max(profile.maxDailyCheckIns || 0, SCHEDULED_DM_DAILY_CAP);
+  const dailyCap = getScheduledDailyCap(profile);
   if (!force && profile.dailyCheckInCount >= dailyCap) return { sent: false, reason: "daily_limit", target };
 
   const user = await client.users.fetch(profile.userId).catch(() => null);
@@ -235,7 +242,7 @@ function startCheckInService(client) {
           if (result.sent) {
             logger.info("Scheduled DM check-in sent", {
               target: scheduledTarget.key,
-              intervalHours: profile.checkInIntervalHours || 2
+              intervalHours: getScheduledCheckInIntervalHours(profile)
             });
           } else if (!["too_recent", "quiet_hours"].includes(result.reason)) {
             logger.warn("Scheduled DM check-in skipped", {
@@ -269,6 +276,8 @@ module.exports = {
   isQuietHoursActive,
   getLastGirlfriendScheduleAnchor,
   getLastScheduledDmAnchor,
+  getScheduledCheckInIntervalHours,
+  getScheduledDailyCap,
   CHECK_IN_TEXT,
   GIRLFRIEND_CHECK_INS,
   ONE_TIME_APOLOGY_REMINDER,

@@ -1,4 +1,6 @@
 const { chance, randomItem } = require("../utils/random");
+const { config } = require("../config");
+const { isRoutineQuietHoursActive } = require("./dailyRoutineService");
 
 const disablePatterns = [
   /stop asking (me )?about water/i,
@@ -98,6 +100,7 @@ function hoursSince(date) {
 
 function shouldAskWater(profile, message = "", detectedMood = "neutral") {
   if (profile.waterReminderDisabled) return false;
+  if (config.girlfriendUserId && profile.userId === config.girlfriendUserId && isRoutineQuietHoursActive(profile)) return false;
   if (mentionsWater(message)) return false;
   if (["romantic", "teasing", "food_received"].includes(detectedMood)) return false;
   if (hoursSince(profile.lastWaterAskedAt) < 4) return false;

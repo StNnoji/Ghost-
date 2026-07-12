@@ -1,5 +1,6 @@
 const UserGhostProfile = require("../models/UserGhostProfile");
 const { config } = require("../config");
+const { formatRoutineTime, getRoutineTimezone } = require("./dailyRoutineService");
 
 function minutesAgo(date) {
   if (!date) return null;
@@ -54,6 +55,18 @@ function buildOwnerReportText(profile, { includeGreeting = true } = {}) {
     parts.push(`last check-in sent ${formatRelativeTime(profile.lastGirlfriendCheckInAt || profile.lastCheckInSentAt)}`);
   }
   if (profile.lastCheckInReplyAt) parts.push(`she replied to a check-in ${formatRelativeTime(profile.lastCheckInReplyAt)}`);
+  parts.push(`routine timezone: ${getRoutineTimezone(profile)}`);
+  if (profile.sleepState === "sleeping") {
+    parts.push(`${name} is marked as sleeping, so random check-ins are paused`);
+  } else if (profile.sleepState === "bedtime_asked") {
+    parts.push(`${name} has a bedtime prompt active`);
+  } else {
+    parts.push(`${name} is marked as awake`);
+  }
+  if (profile.lastGoodNightSentAt) parts.push(`last goodnight sent at ${formatRoutineTime(profile.lastGoodNightSentAt, profile)}`);
+  if (profile.lastGoodMorningSentAt) parts.push(`last good morning sent at ${formatRoutineTime(profile.lastGoodMorningSentAt, profile)}`);
+  if (profile.lastBedtimePromptSentAt) parts.push(`last bedtime prompt sent at ${formatRoutineTime(profile.lastBedtimePromptSentAt, profile)}`);
+  if (profile.nextSleepFollowupAt) parts.push(`next sleep follow-up is ${formatRoutineTime(profile.nextSleepFollowupAt, profile)}`);
 
   let text = `${parts.join(". ")}.`;
   if (profile.allowOwnerMoodSummary) {
@@ -80,6 +93,7 @@ function isOwnerStatusQuestion(message = "") {
   if (!text.trim()) return false;
   if (/\b(owner[-\s]?report|status report|status summary|privacy status|report)\b/i.test(text)) return true;
   if (/\b(check.?in|last dm|last message|last reply|last replied|last talked|when did she last|did she reply|what did she say|have you been talking to)\b/i.test(text)) return true;
+  if (/\b(did she sleep|is alexa awake|is she awake|good ?night|good ?morning|bedtime|sleeping|sleep state)\b/i.test(text)) return true;
   if (/\b(how is she|is she okay|is alexa okay|how is alexa|alexa okay)\b/i.test(text)) return true;
   if (/\b(alexa|helicopter girl|she)\b/i.test(text) && /\b(status|active|consent|consented|mood|summary|privacy|dm|reply|replied|message|check.?in)\b/i.test(text)) return true;
   return false;

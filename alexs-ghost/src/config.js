@@ -50,6 +50,12 @@ const config = {
   keepRecentMemoryExchanges: Number(process.env.KEEP_RECENT_MEMORY_EXCHANGES || process.env.MAX_MEMORY_EXCHANGES || 10),
   giphyApiKey: process.env.GIPHY_API_KEY,
   defaultReminderHours: Number(process.env.DEFAULT_REMINDER_HOURS || 24),
+  girlfriendTimezone: process.env.GIRLFRIEND_TIMEZONE || "Europe/Berlin",
+  goodMorningTime: process.env.GOOD_MORNING_TIME || "07:00",
+  bedtimePromptTime: process.env.BEDTIME_PROMPT_TIME || "22:00",
+  defaultSleepFollowupMinutes: Number(process.env.DEFAULT_SLEEP_FOLLOWUP_MINUTES || 30),
+  sleepQuietHoursStart: process.env.SLEEP_QUIET_HOURS_START || "23:00",
+  sleepQuietHoursEnd: process.env.SLEEP_QUIET_HOURS_END || "07:00",
   nodeEnv: process.env.NODE_ENV || "development"
 };
 

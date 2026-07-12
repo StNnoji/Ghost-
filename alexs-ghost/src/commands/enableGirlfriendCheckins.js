@@ -5,7 +5,7 @@ const { getGirlfriendProfile } = require("../services/ownerReportService");
 const { safeReply } = require("../utils/safeSend");
 
 module.exports = {
-  data: new SlashCommandBuilder().setName("enable-girlfriend-checkins").setDescription("Enable Alexa's two-hour check-ins."),
+  data: new SlashCommandBuilder().setName("enable-girlfriend-checkins").setDescription("Enable Alexa's once- or twice-daily check-ins."),
   async execute(interaction) {
     if (!isGirlfriendUser(interaction.user) && !canOwnerOrManageGhost(interaction)) return safeReply(interaction, { content: "Only Alexa or owner/admin can do that.", ephemeral: true });
     const profile = await getGirlfriendProfile();

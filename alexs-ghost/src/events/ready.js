@@ -1,5 +1,6 @@
 const { Events, ActivityType } = require("discord.js");
 const { startCheckInService } = require("../services/checkInService");
+const { startDailyRoutineService } = require("../services/dailyRoutineService");
 const logger = require("../utils/logger");
 
 module.exports = {
@@ -12,5 +13,6 @@ module.exports = {
       status: "online"
     });
     startCheckInService(client);
+    startDailyRoutineService(client);
   }
 };

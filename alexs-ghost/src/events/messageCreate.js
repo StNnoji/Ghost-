@@ -6,6 +6,7 @@ const { config } = require("../config");
 const { buildGhostReply, sendGhostReply } = require("../services/chatService");
 const { attachGhostReplyToUserMessage, saveGhostMessage, saveUserMessage } = require("../services/chatHistoryService");
 const { shouldDisableCheckIns } = require("../services/checkInService");
+const { handleRoutineUserMessage } = require("../services/dailyRoutineService");
 const { getUserIdentity } = require("../services/identityService");
 const { detectMood } = require("../services/moodService");
 const { buildOwnerDmReply, isOwnerStatusQuestion } = require("../services/ownerReportService");
@@ -119,9 +120,11 @@ module.exports = {
 
       const intentResult = detectLocalIntent(cleaned, {
         lastQuestionAskedByGhost: profile.lastQuestionAskedByGhost,
-        lastMood: profile.lastMood || detectedMood
+        lastMood: profile.lastMood || detectedMood,
+        sleepState: profile.sleepState
       });
 
+      let routineReply = null;
       if (isDm) {
         if (shouldDisableCheckIns(cleaned)) {
           profile.girlfriendCheckInsEnabled = false;
@@ -130,8 +133,25 @@ module.exports = {
         if (profile.lastGirlfriendCheckInAt && (!profile.lastCheckInReplyAt || profile.lastCheckInReplyAt < profile.lastGirlfriendCheckInAt)) {
           profile.lastCheckInReplyAt = new Date();
         }
+        if (identity.isGirlfriend) {
+          routineReply = handleRoutineUserMessage(profile, cleaned);
+          if (routineReply.handled) profile.lastInteractionAt = new Date();
+        }
         await profile.save();
         await saveDmUserHistory(message, { guildId, cleaned, detectedMood, intent: intentResult.intent });
+        if (routineReply?.handled) {
+          const sentMessage = await message.channel.send(routineReply.text);
+          await saveDmGhostHistory(message, sentMessage, routineReply.text, {
+            guildId,
+            cleaned,
+            detectedMood,
+            intent: routineReply.intent
+          });
+          profile.dmChannelAvailable = true;
+          profile.lastDmFailedAt = null;
+          await profile.save();
+          return;
+        }
       }
 
       if (isDm) {
